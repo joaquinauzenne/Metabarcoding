@@ -1,0 +1,34 @@
+Bootstrap: docker
+From: ubuntu:20.04
+
+%labels
+    Author    JoaquinAuzenne
+    Version   1.0
+
+%files
+    /mnt/c/Users/joaau/Metagenomics/Apptainer/edna-pipeline.tar.gz    /opt/edna-pipeline.tar.gz
+
+%post
+    # Update and install minimal tools
+    apt-get update && apt-get install -y \
+        wget \
+        bzip2 \
+        ca-certificates
+
+    # Unpack conda env into /opt/conda
+    mkdir -p /opt/conda
+    tar -xzf /opt/edna-pipeline.tar.gz -C /opt/conda
+
+    # Activate it by default
+    ln -s /opt/conda/bin/activate /usr/local/bin/activate
+    echo ". /opt/conda/bin/activate edna-pipeline" > /environment
+    chmod +x /environment
+
+%environment
+    # ensure conda bin is first
+    export PATH=/opt/conda/bin:$PATH
+    export EDNA_PIPELINE=/opt/edna-pipeline
+
+%runscript
+    # default action when users invoke `apptainer exec image.sif ...`
+    exec bash "$@"

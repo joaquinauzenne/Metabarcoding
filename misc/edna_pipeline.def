@@ -1,0 +1,20 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%labels
+    Author JoaquinAuzenne
+    Version 1.0
+
+%post
+    # update conda and create env from spec
+    conda update -y conda
+    conda env create -f /tmp/edna-pipeline.yml
+
+    # optionally make the env activate by default
+    echo "conda activate edna-pipeline" >> ~/.bashrc
+
+%files
+    edna-pipeline.yml /tmp/edna-pipeline.yml
+
+%runscript
+    exec "$@"
