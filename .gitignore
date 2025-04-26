@@ -1,0 +1,42 @@
+# Ignore fastq and sequencing files
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Ignore BAM/SAM alignment files
+*.bam
+*.sam
+
+# Ignore intermediate results
+*.sif
+*.tar.gz
+*.zip
+*.log
+*.aux
+*.out
+
+# Ignore hidden system files (especially from MacOS or Windows)
+.DS_Store
+Thumbs.db
+
+# Ignore temp files
+*.tmp
+*.temp
+*.swp
+
+# Ignore Python/R data
+*.rds
+*.RData
+*.h5
+*.hdf5
+*.pkl
+
+# Ignore Conda or virtual environments
+.env/
+.venv/
+__pycache__/
+*.pyc
+
+# Ignore result folders if you have them
+eDNA/
