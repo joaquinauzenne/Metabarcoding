@@ -158,7 +158,7 @@ For each sample and each primer-defined locus, a FASTA file of consensus sequenc
 
 ### Phase 3: Cross-Sample Consensus Deduplication (Final Clustering & Primer Trimming)
 
-> Phase 3 takes all consensus sequences from Phase 2 (pooled across samples, for all barcode loci) and performs a final clustering and deduplication, followed by primer trimming. This step collapses identical or nearly identical sequences across samples and ensures each unique sequence (presumably representing a unique taxon DNA barcode) is represented once. We use a two-step approach inspired by the PIMENTA “reclustering” phase (github.com).
+> Phase 3 takes all consensus sequences from Phase 2 (pooled across samples, for all barcode loci) and performs a final clustering and deduplication, followed by primer trimming. This step collapses identical or nearly identical sequences across samples and ensures each unique sequence (presumably representing a unique taxon DNA barcode) is represented once. We use a two-step approach inspired by the [PIMENTA “reclustering” phase]([url](https://github.com/WFSRDataScience/PIMENTA#:~:text=read%20calling%2C%20demultiplexing%2C%20trimming%20sequencing,used%20software)).
 
 1. **All-vs-All Clustering (CD-HIT):**  
    Combine all per-sample consensus FASTAs into one file and run `cd-hit-est` at a high identity threshold (e.g., 98–100%). This clusters redundant consensus sequences across samples (github.com).
