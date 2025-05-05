@@ -39,5 +39,4 @@ __pycache__/
 *.pyc
 
 # Ignore result folders if you have them
-eDNA/
 .Rproj.user
