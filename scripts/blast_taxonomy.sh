@@ -29,28 +29,25 @@ echo
 if [[ -d "$DB_DIR" ]]; then
   DB_OPT="-db $DB_DIR/nt"
   THREAD_OPT="-num_threads $THREADS"
+  FILTER_OPT="-taxids 40674 -negative_taxids 9604" ## <<< Including only Mammalia, excluding Hominidae
 else
   DB_OPT="-remote -db $DB_DIR"
-  THREAD_OPT=""  # remote mode cannot use threads :contentReference[oaicite:1]{index=1}
+  THREAD_OPT=""  # remote mode cannot use threads 
+  FILTER_OPT="-entrez_query 'Mammalia[Organism] NOT Hominidae[Organism]'" ## <<< Remote filter
 fi
+
 echo "↳ Using BLAST options: $DB_OPT $THREAD_OPT"
 echo
-
-# 1) Format local DB if needed
-if [[ "$DB_OPT" =~ ^-db ]] && [[ ! -f "$DB_DIR/nt.00.nsq" ]]; then
-  echo "↳ Formatting nt DB in $DB_DIR…"
-  makeblastdb -in "$DB_DIR/nt.fa" \
-              -dbtype nucl \
-              -parse_seqids \
-              -out "$DB_DIR/nt"
-fi
 
 # 2) Per-barcode taxonomic assignment
 echo
 echo "▶ Phase 4a: Assigning taxonomy per barcode"
 for fasta in "$CONS_BASE"/per_barcode/*/per-barcode-consensus/*_trimmed.fasta; do
-  sample=$(basename "$(dirname "$fasta")")
+  echo "DEBUG: [$fasta] is the fasta file"
+  sample=$(basename "$(dirname "$(dirname "$fasta")")")
+  echo "DEBUG: [$sample] being processed"
   outdir="$CONS_BASE/per_barcode/$sample/taxonomy"
+  echo "DEBUG: [$outdir] has been initialized"
   mkdir -p "$outdir"
 
   echo "  ⟳ [$sample] BLASTn megablast → $outdir/blast.tsv"
@@ -58,9 +55,9 @@ for fasta in "$CONS_BASE"/per_barcode/*/per-barcode-consensus/*_trimmed.fasta; d
          $DB_OPT \
          -query "$fasta" \
          -perc_identity 97 \
-         -qcov_hsp_perc 80 \
-         -max_target_seqs 10 \
-         -outfmt '6 qseqid sseqid pident length evalue bitscore staxids sscinames stitle' \
+         -qcov_hsp_perc 90 \
+         -max_target_seqs 100 \
+         -outfmt '6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames stitle' \ 
          $THREAD_OPT \
          -out "$outdir/blast.tsv"
 
@@ -71,16 +68,14 @@ done
 # 3) Pooled consensus taxonomic assignment
 echo
 echo "▶ Phase 4b: Assigning taxonomy to pooled final consensus"
-pooled_fasta="$CONS_BASE/combined/final_consensus.fasta"
-mkdir -p "$CONS_BASE/combined/taxonomy"
-
 echo "  ⟳ BLASTn megablast → combined/taxonomy/blast.tsv"
 blastn -task megablast \
        $DB_OPT \
-       -query "$pooled_fasta" \
+       $FILTER_OPT \
+       -query "$CONS_BASE/combined/final_consensus.fasta" \
        -perc_identity 97 \
-       -qcov_hsp_perc 80 \
-       -max_target_seqs 10 \
+       -qcov_hsp_perc 90 \
+       -max_target_seqs 100 \
        -outfmt '6 qseqid sseqid pident length evalue bitscore staxids sscinames stitle' \
        $THREAD_OPT \
        -out "$CONS_BASE/combined/taxonomy/blast.tsv"

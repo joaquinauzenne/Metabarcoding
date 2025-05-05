@@ -42,7 +42,7 @@ find "$INPUT_DIR" -type f \( -name '*.fastq' -o -name '*.fastq.gz' \) | while IF
 
   echo "⟳ Trimming & filtering: $REL"
 
-  cutadapt \
+  python -m cutadapt \
     --poly-a \
     --trim-n \
     --max-n 0.05 \
