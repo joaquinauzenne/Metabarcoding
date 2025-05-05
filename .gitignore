@@ -40,3 +40,4 @@ __pycache__/
 
 # Ignore result folders if you have them
 eDNA/
+.Rproj.user
