@@ -19,6 +19,7 @@
 # Ignore hidden system files (especially from MacOS or Windows)
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Ignore temp files
 *.tmp
@@ -39,4 +40,20 @@ __pycache__/
 *.pyc
 
 # Ignore result folders if you have them
-.Rproj.user
+.Rproj.user/
+.Rhistory
+
+# Generated eDNA data and pipeline outputs
+eDNA/
+
+# BLAST databases (large, downloaded separately)
+blastdb/
+scripts/mammalia_nt_db/
+scripts/taxonomy4blast.sqlite3
+
+# Temporary / editor files
+tempCodeRunnerFile.*
+*.code-workspace
+
+# Internal Claude Code session context (local only)
+CLAUDE.md

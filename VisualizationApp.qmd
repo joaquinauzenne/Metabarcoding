@@ -1,0 +1,136 @@
+---
+title: "Metabarcoding Visualization Application"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+# Load required libraries
+library(shiny)
+library(tidyverse)
+library(rredlist)
+library(leaflet)
+library(phytools)
+library(ape)
+library(sf)
+```
+
+## 1. Data Import
+
+```{r data-import}
+# Reactive upload of any Alignment Descriptions CSV
+alignment_data <- reactive({
+  req(input$file)
+  readr::read_csv(input$file$datapath)
+})
+```
+
+## 2. Filter Top Species
+
+```{r filter-species}
+# Returns top N species with Query Cover > 90 & Per. ident > 90
+get_top_species <- function(df, topn = 5) {
+  df %>%
+    filter(`Query Cover` > 90, `Per. ident` > 90) %>%
+    count(`Scientific Name`, sort = TRUE) %>%
+    slice_head(n = topn) %>%
+    pull(`Scientific Name`)
+}
+```
+
+## 3. Fetch IUCN Ranges
+
+```{r fetch-ranges}
+# Downloads and reads IUCN range shapefiles for each species
+fetch_ranges <- function(species_vec, tmp = tempdir()) {
+  key <- Sys.getenv("IUCN_REDLIST_KEY")
+  purrr::map(species_vec, function(sp) {
+    info <- rredlist::rl_species(sp, key = key)$result
+    id   <- info$taxonid[1]
+    url  <- sprintf("https://apiv3.iucnredlist.org/spatial/species/id/%s?token=%s", id, key)
+    zip  <- file.path(tmp, paste0(gsub(" ", "_", sp), ".zip"))
+    httr::GET(url, httr::write_disk(zip, overwrite = TRUE))
+    dir  <- file.path(tmp, gsub(" ", "_", sp))
+    unzip(zip, exdir = dir)
+    sf::st_read(list.files(dir, pattern = "\\.shp$", full.names = TRUE)[1], quiet = TRUE)
+  }) %>%
+    purrr::set_names(species_vec) %>%
+    dplyr::bind_rows(.id = "species")
+}
+```
+
+## 4. Prepare Spatial Data
+
+```{r prepare-spatial}
+# Ensure valid geometries and WGS84 projection
+prepare_sf <- function(ranges_sf) {
+  ranges_sf %>%
+    sf::st_make_valid() %>%
+    sf::st_transform(crs = 4326)
+}
+```
+
+## 5. UI Layout
+
+```{r ui}
+ui <- fluidPage(
+  titlePanel("Alignment-Range Explorer"),
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("file", "Upload Alignment CSV", accept = ".csv"),
+      numericInput("topn", "Top species to map:", value = 5, min = 1)
+    ),
+    mainPanel(
+      tableOutput("species_table"),
+      leafletOutput("range_map", height = "600px")
+    )
+  )
+)
+```
+
+## 6. Server Logic
+
+```{r server}
+server <- function(input, output, session) {
+  # 1) Filtered species list
+  filtered <- reactive({
+    df   <- alignment_data()
+    tops <- get_top_species(df, input$topn)
+    df %>% filter(`Scientific Name` %in% tops)
+  })
+
+  # 2) Display species table
+  output$species_table <- renderTable({
+    req(filtered())
+    filtered() %>%
+      distinct(`Scientific Name`) %>%
+      rename(Species = `Scientific Name`)
+  })
+
+  # 3) Render interactive map
+  output$range_map <- renderLeaflet({
+    tops   <- filtered() %>% pull(`Scientific Name`) %>% unique()
+    ranges <- fetch_ranges(tops)
+    ranges <- prepare_sf(ranges)
+
+    leaflet(ranges) %>%
+      addTiles() %>%
+      addPolygons(
+        data = ranges,
+        color = ~viridis::viridis_pal()(length(unique(species)))[as.integer(factor(species))],
+        weight = 1, opacity = 0.8,
+        group = ~species
+      ) %>%
+      addLayersControl(
+        overlayGroups = unique(ranges$species),
+        options = layersControlOptions(collapsed = FALSE)
+      )
+  })
+}
+```
+
+## 7. Run the App
+
+```{r shiny-app, echo=FALSE}
+shinyApp(ui, server)
+```
