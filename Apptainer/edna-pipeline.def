@@ -1,28 +1,18 @@
 Bootstrap: docker
-From: ubuntu:20.04
+From: condaforge/miniforge3:latest
 
 %labels
     Author    JoaquinAuzenne
-    Version   1.1
+    Version   1.2
 
 %post
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update && apt-get install -y \
-        wget bzip2 ca-certificates curl procps && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    # condaforge/miniforge3 base already provides mamba, conda, wget, curl.
+    # No apt-get or Miniforge download needed — avoids HPC outbound HTTP restrictions.
 
-    # Install Miniforge3 — provides mamba + conda-forge defaults.
-    # No tarball copy needed; everything installs from public channels.
-    wget -q \
-        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
-        -O /tmp/miniforge.sh
-    bash /tmp/miniforge.sh -b -p /opt/conda
-    rm /tmp/miniforge.sh
-
-    # Create the edna-pipeline environment.
-    # Includes all tools that were in the original pack PLUS the four that were missing:
+    # Create the edna-pipeline environment with all pipeline tools.
+    # Adds the four that were missing from the original pack:
     #   seqtk, vsearch, r-base (+r-tidyverse), krona (ktImportText).
-    /opt/conda/bin/mamba create -y -n edna-pipeline \
+    mamba create -y -n edna-pipeline \
         -c conda-forge -c bioconda \
         python=3.10 \
         cutadapt \
@@ -44,15 +34,13 @@ From: ubuntu:20.04
         r-ggplot2
 
     # Initialise Krona taxonomy database.
-    # Runs during build so ktImportText works without network on Lonestar6.
     /opt/conda/envs/edna-pipeline/opt/krona/updateTaxonomy.sh 2>/dev/null || true
 
-    # Shrink image — remove installer cache.
-    /opt/conda/bin/conda clean -afy
+    # Remove installer cache to reduce image size.
+    mamba clean -afy
 
 %environment
     # Expose the environment's bin directly — no conda activation needed.
-    # Tools are accessible as plain executables once PATH is set.
     export PATH=/opt/conda/envs/edna-pipeline/bin:/opt/conda/bin:$PATH
     export CONDA_DEFAULT_ENV=edna-pipeline
 

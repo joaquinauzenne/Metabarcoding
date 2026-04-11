@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Script : batch_job.sh
-# Purpose: Makes a batch job in TACC to run a full soil sample analysis
+# Purpose: SLURM submission script for a full 12-barcode OTU run on Lonestar6.
+#          Edit <your-allocation> before submitting.
 #
 # Usage:
-#   Log into TACC, then run this script to process pipeline.sh
-#   bash setup.sh <CONS_BASE> <DB_DIR> [threads]
+#   sbatch scripts/batch_job.sh
 #
-#   CONS_BASE:  base dir of Phase 3 output (contains per_barcode/ and combined/)
-#   DB_DIR:     directory containing formatted BLAST nt DB (nt.*) OR a
-#               remote DB name (e.g. nt, nr, refseq_rna)
-#   threads:    number of threads to use (default: 4)
+# Resume from a specific phase (e.g. Phase3 onwards):
+#   sbatch --export=ALL,MODULES="Phase3,Phase4" scripts/batch_job.sh
 # ─────────────────────────────────────────────────────────────────────────────
+#SBATCH -J edna-otu
+#SBATCH -o logs/edna_%j.out
+#SBATCH -e logs/edna_%j.err
+#SBATCH -p normal
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --cpus-per-task=8
+#SBATCH -t 08:00:00
+#SBATCH -A <your-allocation>
 
-#SBATCH -J myjob           # Job name
-#SBATCH -o myjob.o%j       # Name of stdout output file
-#SBATCH -p normal          # Queue (partition) name
-#SBATCH -N 1               # Total # of nodes
-#SBATCH -n 1               # Total # of mpi tasks
-#SBATCH -t 01:30:00        # Run time (hh:mm:ss)
-#SBATCH -A myproject       # Allocation name (req'd if you have more than 1)
+set -euo pipefail
 
-# Other commands must follow all #SBATCH directives...
+module load tacc-apptainer
 
+# MODULES can be overridden at sbatch time via --export=ALL,MODULES="Phase3,Phase4"
+MODULES="${MODULES:-all}"
+
+apptainer exec Apptainer/edna-pipeline.sif \
+  bash scripts/pipeline.sh \
+  eDNA/2024 \
+  eDNA/otu_trimmed \
+  eDNA/otu \
+  blastdb/mammalia_nt \
+  8 true misc/primers.txt otu "$MODULES"

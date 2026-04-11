@@ -57,3 +57,9 @@ tempCodeRunnerFile.*
 
 # Internal Claude Code session context (local only)
 CLAUDE.md
+
+# Golem / Shiny app
+edna-viz/.Rcheck/
+
+# DADA2 intermediates
+scripts/dada2_output/
