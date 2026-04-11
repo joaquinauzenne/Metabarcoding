@@ -7,7 +7,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=06:00:00
-#SBATCH --account=<your-allocation>       # <- fill in before sbatch
+# Note: --account is NOT hardcoded here. The script prompts for it
+#       interactively when run directly, then self-submits via sbatch.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # mammalia_nt_db.sh
@@ -16,11 +17,10 @@
 # Download policy:  NEVER downloads unless the user explicitly opts in.
 #   - nt_euk present  → uses it as-is (warns if stale)
 #   - nt_euk missing  → ERROR with instructions to opt in
-#   - DOWNLOAD_DB=true → downloads/refreshes nt_euk via rsync, then builds
+#   - DOWNLOAD_DB=true → prompted interactively, or set before calling
 #
-# Usage:
-#   sbatch scripts/mammalia_nt_db.sh                  # build only (no download)
-#   DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh  # download + build
+# Usage (run directly — prompts for allocation + download choice):
+#   bash scripts/mammalia_nt_db.sh
 #
 # Output:
 #   $WORK/Metabarcoding/blastdb/mammalia_nt.*  (BLAST DB prefix)
@@ -29,6 +29,50 @@
 #   Mammalia : 40674  (all mammals)
 #   Hominidae: 9604   (excluded — reduces human contamination signal)
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Self-submission block (runs only outside of a SLURM job) ────────────────
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+  printf "╔══════════════════════════════════════════════════════════════╗\n"
+  printf "║  mammalia_nt_db.sh — SLURM submission                       ║\n"
+  printf "╚══════════════════════════════════════════════════════════════╝\n"
+
+  # Show available allocations to help the user choose
+  if command -v show_allocations &>/dev/null; then
+    printf "\nYour available allocations:\n"
+    show_allocations 2>/dev/null || true
+    printf "\n"
+  fi
+
+  # Prompt 1: allocation account
+  read -rp "Enter your TACC allocation account: " ACCOUNT
+  if [[ -z "$ACCOUNT" ]]; then
+    printf "[ERROR] No allocation entered. Aborting.\n" >&2
+    exit 1
+  fi
+
+  # Prompt 2: download/refresh nt_euk
+  printf "\nnt_euk source database options:\n"
+  printf "  [1] Use existing nt_euk (skip download) — recommended if already present\n"
+  printf "  [2] Download / refresh nt_euk from NCBI via rsync (~400 GB, several hours)\n"
+  read -rp "Choice [1/2, default=1]: " DL_CHOICE
+  case "${DL_CHOICE:-1}" in
+    2) DOWNLOAD_DB=true  ;;
+    *) DOWNLOAD_DB=false ;;
+  esac
+  printf "[INFO] DOWNLOAD_DB=%s\n" "$DOWNLOAD_DB"
+
+  mkdir -p logs
+
+  JOB_ID=$(DOWNLOAD_DB="$DOWNLOAD_DB" \
+    sbatch --account="$ACCOUNT" "$(realpath "$0")" | awk '{print $NF}')
+
+  printf "[OK]   Submitted job %s with account %s\n" "$JOB_ID" "$ACCOUNT"
+  printf "       Monitor : squeue -j %s\n" "$JOB_ID"
+  printf "       Log     : logs/mammalia_nt_%s.out\n" "$JOB_ID"
+  exit 0
+fi
+
+# ─── Everything below runs inside the SLURM job ──────────────────────────────
 
 set -euo pipefail
 IFS=$'\n\t'
