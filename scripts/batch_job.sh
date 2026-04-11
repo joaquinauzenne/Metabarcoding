@@ -2,13 +2,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Script : batch_job.sh
 # Purpose: SLURM submission script for a full 12-barcode OTU run on Lonestar6.
-#          Edit <your-allocation> before submitting.
 #
-# Usage:
-#   sbatch scripts/batch_job.sh
+# Usage (run directly — prompts for allocation + phase override):
+#   bash scripts/batch_job.sh
 #
-# Resume from a specific phase (e.g. Phase3 onwards):
-#   sbatch --export=ALL,MODULES="Phase3,Phase4" scripts/batch_job.sh
+# Resume from a specific phase:
+#   bash scripts/batch_job.sh     # then enter e.g. "Phase3,Phase4" at prompt
 # ─────────────────────────────────────────────────────────────────────────────
 #SBATCH -J edna-otu
 #SBATCH -o logs/edna_%j.out
@@ -18,13 +17,57 @@
 #SBATCH -n 1
 #SBATCH --cpus-per-task=8
 #SBATCH -t 08:00:00
-#SBATCH -A <your-allocation>
+# Note: --account is NOT hardcoded here. The script prompts for it
+#       interactively when run directly, then self-submits via sbatch.
+
+# ─── Self-submission block (runs only outside of a SLURM job) ────────────────
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+  printf "╔══════════════════════════════════════════════════════════════╗\n"
+  printf "║  batch_job.sh — eDNA pipeline SLURM submission              ║\n"
+  printf "╚══════════════════════════════════════════════════════════════╝\n"
+
+  # Show available allocations to help the user choose
+  if command -v show_allocations &>/dev/null; then
+    printf "\nYour available allocations:\n"
+    show_allocations 2>/dev/null || true
+    printf "\n"
+  fi
+
+  # Prompt 1: allocation account
+  read -rp "Enter your TACC allocation account: " ACCOUNT
+  if [[ -z "$ACCOUNT" ]]; then
+    printf "[ERROR] No allocation entered. Aborting.\n" >&2
+    exit 1
+  fi
+
+  # Prompt 2: phase selection
+  printf "\nPipeline phases to run:\n"
+  printf "  all              — run all phases (default)\n"
+  printf "  Phase1           — preprocess only\n"
+  printf "  Phase3,Phase4    — consensus + taxonomy (resume after QC)\n"
+  read -rp "Phases [default=all]: " PHASE_INPUT
+  MODULES="${PHASE_INPUT:-all}"
+  printf "[INFO] MODULES=%s\n" "$MODULES"
+
+  mkdir -p logs
+
+  JOB_ID=$(MODULES="$MODULES" \
+    sbatch --account="$ACCOUNT" "$(realpath "$0")" | awk '{print $NF}')
+
+  printf "[OK]   Submitted job %s with account %s\n" "$JOB_ID" "$ACCOUNT"
+  printf "       Monitor : squeue -j %s\n" "$JOB_ID"
+  printf "       Log     : logs/edna_%s.out\n" "$JOB_ID"
+  exit 0
+fi
+
+# ─── Everything below runs inside the SLURM job ──────────────────────────────
 
 set -euo pipefail
 
 module load tacc-apptainer
 
-# MODULES can be overridden at sbatch time via --export=ALL,MODULES="Phase3,Phase4"
+# MODULES is passed via the self-submission block above, or can be overridden:
+#   MODULES="Phase3,Phase4" bash scripts/batch_job.sh
 MODULES="${MODULES:-all}"
 
 apptainer exec Apptainer/edna-pipeline.sif \
