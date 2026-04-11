@@ -1,43 +1,179 @@
-#!/bin/bash
-#SBATCH --job-name=mammalia_nt_db       # Job name
-#SBATCH --output=mammalia_nt.%j.out     # STDOUT
-#SBATCH --error=mammalia_nt.%j.err      # STDERR
-#SBATCH --partition=vm-small            # Partition/queue
-#SBATCH --nodes=1                       # 1 node
-#SBATCH --ntasks=1                      # 1 task
-#SBATCH --cpus-per-task=16              # Threads for parallel
-#SBATCH --time=05:00:00                 # hh:mm:ss
-#SBATCH --account=OTH21013              # Your allocation
+#!/usr/bin/env bash
+#SBATCH --job-name=mammalia_nt_db
+#SBATCH --output=logs/mammalia_nt_%j.out
+#SBATCH --error=logs/mammalia_nt_%j.err
+#SBATCH --partition=normal
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --time=06:00:00
+#SBATCH --account=<your-allocation>       # <- fill in before sbatch
 
-### 1) Load modules
-module load biocontainers/0.1.0
-module load hs-blastn
+# ─────────────────────────────────────────────────────────────────────────────
+# mammalia_nt_db.sh
+# Build a Mammalia-only BLAST nucleotide database from nt_euk.
+#
+# Download policy:  NEVER downloads unless the user explicitly opts in.
+#   - nt_euk present  → uses it as-is (warns if stale)
+#   - nt_euk missing  → ERROR with instructions to opt in
+#   - DOWNLOAD_DB=true → downloads/refreshes nt_euk via rsync, then builds
+#
+# Usage:
+#   sbatch scripts/mammalia_nt_db.sh                  # build only (no download)
+#   DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh  # download + build
+#
+# Output:
+#   $WORK/Metabarcoding/blastdb/mammalia_nt.*  (BLAST DB prefix)
+#
+# Taxids:
+#   Mammalia : 40674  (all mammals)
+#   Hominidae: 9604   (excluded — reduces human contamination signal)
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+IFS=$'\n\t'
+
 module load ncbi-blast-plus
 
 export LC_ALL=C
 
-### 2) Prepare BLASTDB directory
-export BLASTDB=$WORK/Metabarcoding/blastdb
-mkdir -p $BLASTDB && cd $BLASTDB
+BLASTDB_DIR="$WORK/Metabarcoding/blastdb"
+DB_PREFIX="${BLASTDB_DIR}/nt_euk"
+OUT_PREFIX="${BLASTDB_DIR}/mammalia_nt"
+STALE_DAYS="${STALE_DAYS:-90}"              # age threshold for staleness warning
+DOWNLOAD_DB="${DOWNLOAD_DB:-false}"         # must be explicitly set to "true"
 
-### 3) List and download NT volumes
-rsync --list-only --no-motd rsync://ftp.ncbi.nlm.nih.gov/blast/db/nt_euk.*.tar.gz | awk '{print $NF}' > nt_euk.links.list             # list files :contentReference[oaicite:3]{index=3}
+mkdir -p "$BLASTDB_DIR" logs
 
-sed -i "s/'\$//" nt_euk.links.list
+printf "╔══════════════════════════════════════════════════════════════╗\n"
+printf "║  mammalia_nt_db.sh — Mammalia BLAST DB builder              ║\n"
+printf "╚══════════════════════════════════════════════════════════════╝\n"
+printf "[INFO] BLASTDB dir  : %s\n" "$BLASTDB_DIR"
+printf "[INFO] DOWNLOAD_DB  : %s\n" "$DOWNLOAD_DB"
 
-### 3.5) Download all volumes, resuming if interrupted
-rsync --archive --partial --progress --compress --no-motd --files-from=nt_euk.links.list rsync://ftp.ncbi.nlm.nih.gov/blast/db/ .    # efficient batch download :contentReference[oaicite:9]{index=9}
+export BLASTDB="$BLASTDB_DIR"
 
-### 4) Decompress 
-for f in nt_euk.*.tar.gz; do
-  tar -zxf "$f"
-  rm *.tar.gz
-done
+# ─── Helper: find the newest nt_euk .nhr index file ──────────────────────────
+_newest_nhr() {
+  local newest=0 ts
+  for f in "${DB_PREFIX}".*.nhr "${DB_PREFIX}".nhr; do
+    [[ -f "$f" ]] || continue
+    ts=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+    (( ts > newest )) && newest=$ts
+  done
+  echo "$newest"
+}
 
-### 5) Extract Mammalia sequences
-blastdbcmd -db nt_euk -taxids 40674 -outfmt "%f" -out nt_euk_mammalia.fasta                                       # filter by taxid :contentReference[oaicite:6]{index=6}
+# ─── Helper: check whether nt_euk index files exist ──────────────────────────
+_nt_euk_present() {
+  ls "${DB_PREFIX}".*.nhr &>/dev/null || ls "${DB_PREFIX}".nhr &>/dev/null
+}
 
-### 6) Build Mammalia-only BLAST DB
-makeblastdb -in nt_euk_mammalia.fasta -dbtype nucl -parse_seqids -out nt_euk_mammalia                                           # create custom DB :contentReference[oaicite:7]{index=7}
+# ─── Download function (only called when DOWNLOAD_DB=true) ───────────────────
+_download_nt_euk() {
+  printf "[INFO] Downloading nt_euk volumes from NCBI via rsync...\n"
+  cd "$BLASTDB_DIR"
 
-echo "Mammalia NT database ready in $BLASTDB/nt_euk_mammalia.*"
+  rsync --list-only --no-motd rsync://ftp.ncbi.nlm.nih.gov/blast/db/ \
+    | awk '/nt_euk.*\.tar\.gz$/ {print $NF}' > nt_euk.links.list
+
+  local n_files
+  n_files=$(wc -l < nt_euk.links.list)
+  printf "[INFO] Found %s volume files to download\n" "$n_files"
+
+  rsync --archive --partial --progress --compress --no-motd \
+    --files-from=nt_euk.links.list \
+    rsync://ftp.ncbi.nlm.nih.gov/blast/db/ .
+
+  printf "[INFO] Decompressing volumes...\n"
+  for f in nt_euk.*.tar.gz; do
+    [[ -f "$f" ]] || continue
+    tar -zxf "$f" && rm -f "$f"
+  done
+
+  printf "[OK]   nt_euk download and decompression complete\n"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 1: Resolve nt_euk source database
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if [[ "$DOWNLOAD_DB" == "true" ]]; then
+  # ── User explicitly opted in to download ──
+  printf "[INFO] DOWNLOAD_DB=true — downloading/refreshing nt_euk\n"
+  _download_nt_euk
+
+elif _nt_euk_present; then
+  # ── nt_euk exists — use it, but warn if stale ──
+  NEWEST=$(_newest_nhr)
+  NOW=$(date +%s)
+  AGE_DAYS=$(( (NOW - NEWEST) / 86400 ))
+
+  if (( AGE_DAYS > STALE_DAYS )); then
+    printf "[WARN] nt_euk index files are %s days old (> %s days)\n" \
+      "$AGE_DAYS" "$STALE_DAYS" >&2
+    printf "       To refresh, resubmit with:\n" >&2
+    printf "       DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n" >&2
+  fi
+  printf "[OK]   Using existing nt_euk (%s days old)\n" "$AGE_DAYS"
+
+else
+  # ── nt_euk missing and user did NOT opt in — stop ──
+  printf "[ERROR] nt_euk index files not found in %s\n" "$BLASTDB_DIR" >&2
+  printf "        The source database must be downloaded before building\n" >&2
+  printf "        the Mammalia DB. Resubmit with:\n" >&2
+  printf "\n" >&2
+  printf "          DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n" >&2
+  printf "\n" >&2
+  exit 1
+fi
+
+# ─── Verify nt_euk is usable ─────────────────────────────────────────────────
+if ! _nt_euk_present; then
+  printf "[ERROR] nt_euk index files not found after download step\n" >&2
+  exit 1
+fi
+printf "[OK]   nt_euk index files verified\n"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 2: Extract Mammalia sequences, excluding Hominidae
+# ═══════════════════════════════════════════════════════════════════════════════
+
+printf "[INFO] Extracting Mammalia (taxid 40674) excluding Hominidae (taxid 9604)...\n"
+blastdbcmd \
+  -db "${DB_PREFIX}" \
+  -taxids 40674 \
+  -negative_taxids 9604 \
+  -outfmt "%f" \
+  -out "${BLASTDB_DIR}/nt_euk_mammalia.fasta"
+
+NSEQ=$(grep -c '^>' "${BLASTDB_DIR}/nt_euk_mammalia.fasta" 2>/dev/null || echo 0)
+printf "[OK]   Extracted %s sequences\n" "$NSEQ"
+
+if [[ "$NSEQ" -eq 0 ]]; then
+  printf "[ERROR] Extraction produced 0 sequences — check nt_euk integrity\n" >&2
+  exit 1
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 3: Build Mammalia-only BLAST database
+# ═══════════════════════════════════════════════════════════════════════════════
+
+printf "[INFO] Building BLAST DB: mammalia_nt...\n"
+makeblastdb \
+  -in "${BLASTDB_DIR}/nt_euk_mammalia.fasta" \
+  -dbtype nucl \
+  -parse_seqids \
+  -out "${OUT_PREFIX}" \
+  -title "Mammalia_nt_excluding_Hominidae"
+
+printf "[OK]   Mammalia NT database ready: %s.*\n" "$OUT_PREFIX"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 4: Cleanup intermediate FASTA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+rm -f "${BLASTDB_DIR}/nt_euk_mammalia.fasta"
+printf "[OK]   Intermediate FASTA removed\n"
+printf "[OK]   Done. Run: bash scripts/setup.sh eDNA/2024 blastdb/mammalia_nt 8 \"\" otu\n"
+printf "       Then submit: sbatch scripts/batch_job.sh\n"
