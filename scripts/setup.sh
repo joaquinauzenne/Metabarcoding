@@ -100,16 +100,21 @@ done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. BLAST database
+# DB_DIR is a BLAST path prefix (e.g. blastdb/nt_euk), not a directory.
+# blastn is called as: blastn -db "$DB_DIR"
 # ─────────────────────────────────────────────────────────────────────────────
-printf "[INFO] Checking BLAST database in %s...\n" "$DB_DIR"
-DB_BASE=$(basename "$DB_DIR")
-if ls "${DB_DIR}"/${DB_BASE}.n* &>/dev/null || ls "${DB_DIR}"/nt.n* &>/dev/null; then
-  printf "[OK]   BLAST DB files found\n"
-elif [[ -d "$DB_DIR" ]]; then
-  printf "[WARN] DB directory exists but no .n* index files found in %s\n" "$DB_DIR" >&2
-  printf "       Run scripts/blastdb_init.sh or scripts/mammalia_nt_db.sh to build the DB.\n" >&2
+printf "[INFO] Checking BLAST database prefix: %s\n" "$DB_DIR"
+DB_PARENT=$(dirname "$DB_DIR")
+if [[ ! -d "$DB_PARENT" ]]; then
+  printf "[ERROR] DB parent directory '%s' does not exist\n" "$DB_PARENT" >&2; exit 1
+fi
+if ls "${DB_DIR}".*.nhr &>/dev/null || ls "${DB_DIR}".nhr &>/dev/null; then
+  printf "[OK]   BLAST DB index files found for prefix: %s\n" "$DB_DIR"
 else
-  printf "[ERROR] DB_DIR '%s' does not exist\n" "$DB_DIR" >&2; exit 1
+  printf "[WARN] No .nhr index files found matching '%s.*'\n" "$DB_DIR" >&2
+  printf "       Available prefixes in %s:\n" "$DB_PARENT" >&2
+  ls "$DB_PARENT"/*.nal 2>/dev/null | sed 's/\.nal$//' | xargs -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
+  printf "       Run scripts/blastdb_init.sh or scripts/mammalia_nt_db.sh to build the DB.\n" >&2
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
