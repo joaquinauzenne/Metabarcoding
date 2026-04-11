@@ -91,7 +91,7 @@ TOOLS=(cutadapt fastqc NanoPlot multiqc blastn NGSpeciesID mafft
 [[ "$MODE" == "asv" ]] && TOOLS+=(vsearch)
 
 for t in "${TOOLS[@]}"; do
-  if apptainer exec "$SIF" command -v "$t" &>/dev/null; then
+  if apptainer exec "$SIF" bash -c "command -v '$t'" &>/dev/null; then
     printf "[OK]   %s\n" "$t"
   else
     printf "[ERROR] Tool not found in container: %s\n" "$t" >&2; exit 1
