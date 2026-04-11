@@ -55,12 +55,10 @@ printf "  MODE:     %s\n" "$MODE"
 # ─────────────────────────────────────────────────────────────────────────────
 SIF="Apptainer/edna-pipeline.sif"
 
-if command -v module &>/dev/null; then
-  module load tacc-apptainer 2>/dev/null || true
-fi
-
+# Note: load tacc-apptainer before running this script:
+#   module load tacc-apptainer
 if ! command -v apptainer &>/dev/null; then
-  printf "[ERROR] apptainer not found in PATH. On Lonestar6 run: module load tacc-apptainer\n" >&2
+  printf "[ERROR] apptainer not found in PATH. Run: module load tacc-apptainer\n" >&2
   exit 1
 fi
 printf "[OK]   apptainer: %s\n" "$(apptainer --version)"
