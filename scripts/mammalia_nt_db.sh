@@ -77,6 +77,7 @@ fi
 set -euo pipefail
 IFS=$'\n\t'
 
+module load biocontainers
 module load ncbi-blast-plus
 
 export LC_ALL=C
