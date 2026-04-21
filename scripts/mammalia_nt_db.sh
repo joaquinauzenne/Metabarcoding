@@ -198,10 +198,13 @@ fi
 printf "[OK]   nt_euk index files verified\n"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Step 2: Extract Mammalia sequences, excluding Hominidae
+# Step 2: Extract Mammalia sequences (Hominidae excluded at search time)
 # ═══════════════════════════════════════════════════════════════════════════════
+# blastdbcmd supports only -taxids/-taxidlist (no negative variant). Hominidae
+# (9604) is excluded downstream by blastn -negative_taxids in pipeline.sh's
+# FILTER_OPT (Phase 4), so this DB intentionally contains all of Mammalia.
 
-printf "[INFO] Extracting Mammalia (taxid 40674) excluding Hominidae (taxid 9604)...\n"
+printf "[INFO] Extracting Mammalia (taxid 40674); Hominidae (9604) excluded at search time via blastn -negative_taxids\n"
 apptainer exec \
   --bind "$WORK":"$WORK" \
   --env "BLASTDB=$BLASTDB_DIR" \
@@ -209,7 +212,6 @@ apptainer exec \
   blastdbcmd \
     -db "${DB_PREFIX}" \
     -taxids 40674 \
-    -negative_taxids 9604 \
     -outfmt "%f" \
     -out "${BLASTDB_DIR}/nt_euk_mammalia.fasta"
 
@@ -234,7 +236,7 @@ apptainer exec \
     -dbtype nucl \
     -parse_seqids \
     -out "${OUT_PREFIX}" \
-    -title "Mammalia_nt_excluding_Hominidae"
+    -title "Mammalia_nt (Hominidae excluded at query time)"
 
 printf "[OK]   Mammalia NT database ready: %s.*\n" "$OUT_PREFIX"
 
