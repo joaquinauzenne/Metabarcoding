@@ -80,11 +80,22 @@ IFS=$'\n\t'
 # TACC's tacc-apptainer bash-completion script references BASH_COMPLETION_DEBUG
 # without a default; under `set -u` this aborts the job during module load.
 # Enable nounset after modules are loaded.
+#
+# Note: we deliberately do NOT load `biocontainers` / `ncbi-blast-plus`.
+# The system's `/usr/bin/blastdbcmd` resolved via those modules is XALT-
+# wrapped and links against a newer glibc than the LS6 compute node
+# provides (`GLIBC_2.25' not found`). Instead we run BLAST+ inside the
+# edna-pipeline.sif container, which is the pattern the rest of the
+# pipeline already uses.
 module load tacc-apptainer
-module load biocontainers
-module load ncbi-blast-plus
 
 set -u
+
+SIF="$WORK/Metabarcoding/Apptainer/edna-pipeline.sif"
+if [[ ! -f "$SIF" ]]; then
+  printf "[ERROR] edna-pipeline.sif not found at %s\n" "$SIF" >&2
+  exit 1
+fi
 
 export LC_ALL=C
 
@@ -191,12 +202,16 @@ printf "[OK]   nt_euk index files verified\n"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 printf "[INFO] Extracting Mammalia (taxid 40674) excluding Hominidae (taxid 9604)...\n"
-blastdbcmd \
-  -db "${DB_PREFIX}" \
-  -taxids 40674 \
-  -negative_taxids 9604 \
-  -outfmt "%f" \
-  -out "${BLASTDB_DIR}/nt_euk_mammalia.fasta"
+apptainer exec \
+  --bind "$WORK":"$WORK" \
+  --env "BLASTDB=$BLASTDB_DIR" \
+  "$SIF" \
+  blastdbcmd \
+    -db "${DB_PREFIX}" \
+    -taxids 40674 \
+    -negative_taxids 9604 \
+    -outfmt "%f" \
+    -out "${BLASTDB_DIR}/nt_euk_mammalia.fasta"
 
 NSEQ=$(grep -c '^>' "${BLASTDB_DIR}/nt_euk_mammalia.fasta" 2>/dev/null || echo 0)
 printf "[OK]   Extracted %s sequences\n" "$NSEQ"
@@ -211,12 +226,15 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════════
 
 printf "[INFO] Building BLAST DB: mammalia_nt...\n"
-makeblastdb \
-  -in "${BLASTDB_DIR}/nt_euk_mammalia.fasta" \
-  -dbtype nucl \
-  -parse_seqids \
-  -out "${OUT_PREFIX}" \
-  -title "Mammalia_nt_excluding_Hominidae"
+apptainer exec \
+  --bind "$WORK":"$WORK" \
+  "$SIF" \
+  makeblastdb \
+    -in "${BLASTDB_DIR}/nt_euk_mammalia.fasta" \
+    -dbtype nucl \
+    -parse_seqids \
+    -out "${OUT_PREFIX}" \
+    -title "Mammalia_nt_excluding_Hominidae"
 
 printf "[OK]   Mammalia NT database ready: %s.*\n" "$OUT_PREFIX"
 
