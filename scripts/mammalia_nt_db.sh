@@ -74,11 +74,17 @@ fi
 
 # ─── Everything below runs inside the SLURM job ──────────────────────────────
 
-set -euo pipefail
+set -eo pipefail
 IFS=$'\n\t'
 
+# TACC's tacc-apptainer bash-completion script references BASH_COMPLETION_DEBUG
+# without a default; under `set -u` this aborts the job during module load.
+# Enable nounset after modules are loaded.
+module load tacc-apptainer
 module load biocontainers
 module load ncbi-blast-plus
+
+set -u
 
 export LC_ALL=C
 

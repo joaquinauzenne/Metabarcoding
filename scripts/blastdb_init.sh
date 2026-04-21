@@ -12,15 +12,19 @@
 
 ####— Fail-fast and error trap —####
 set -o errexit    # Exit on non-zero :contentReference[oaicite:7]{index=7}
-set -o nounset    # Error on undefined vars :contentReference[oaicite:8]{index=8}
 set -o pipefail   # Fail on any pipe component :contentReference[oaicite:9]{index=9}
 set -o errtrace   # ERR trap in subshells :contentReference[oaicite:10]{index=10}
+# nounset is enabled AFTER module load (see below) — tacc-apptainer's
+# bash-completion references BASH_COMPLETION_DEBUG without a default,
+# which aborts the job under `set -u` during module load.
 
 trap 'echo "[ERROR] Line $LINENO: \`$BASH_COMMAND\` failed with status $?" >&2' ERR
 
 ####— 1) Modules & working directory —####
 echo "[INFO] Loading modules and changing to Apptainer dir"
 module load tacc-apptainer                         # Load Apptainer :contentReference[oaicite:12]{index=12}
+
+set -o nounset    # Error on undefined vars :contentReference[oaicite:8]{index=8}
 
 cd "$WORK/Metabarcoding/Apptainer" || { 
   echo "[ERROR] Cannot cd to Apptainer dir $WORK/Metabarcoding/Apptainer" >&2

@@ -62,9 +62,13 @@ fi
 
 # ─── Everything below runs inside the SLURM job ──────────────────────────────
 
-set -euo pipefail
+set -eo pipefail
 
+# TACC's tacc-apptainer bash-completion script references BASH_COMPLETION_DEBUG
+# without a default; under `set -u` this aborts the job during module load.
 module load tacc-apptainer
+
+set -u
 
 # MODULES is passed via the self-submission block above, or can be overridden:
 #   MODULES="Phase3,Phase4" bash scripts/batch_job.sh
