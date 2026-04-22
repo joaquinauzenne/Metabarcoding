@@ -126,34 +126,72 @@ _newest_nhr() {
   echo "$newest"
 }
 
-# ─── Helper: check whether nt_euk index files exist ──────────────────────────
+# ─── Helper: check whether nt_euk volume index files exist ───────────────────
 _nt_euk_present() {
   ls "${DB_PREFIX}".*.nhr &>/dev/null || ls "${DB_PREFIX}".nhr &>/dev/null
 }
 
+# ─── Helper: list missing auxiliary files required by -taxids filtering ──────
+# blastdbcmd -taxids needs:
+#   nt_euk.nal              — multi-volume alias (without it, blastdbcmd can't
+#                             resolve "-db nt_euk" even when volumes exist)
+#   taxdb.btd / taxdb.bti   — scientific-name / common-name lookup tables
+#   taxonomy4blast.sqlite3  — lineage DB for taxid subtree expansion (required
+#                             to resolve "all descendants of taxid 40674")
+_missing_aux_files() {
+  local missing=()
+  [[ -f "${BLASTDB_DIR}/nt_euk.nal" ]]             || missing+=("nt_euk.nal")
+  [[ -f "${BLASTDB_DIR}/taxdb.btd" ]]              || missing+=("taxdb.btd")
+  [[ -f "${BLASTDB_DIR}/taxdb.bti" ]]              || missing+=("taxdb.bti")
+  [[ -f "${BLASTDB_DIR}/taxonomy4blast.sqlite3" ]] || missing+=("taxonomy4blast.sqlite3")
+  if (( ${#missing[@]} > 0 )); then
+    printf "%s\n" "${missing[@]}"
+  fi
+}
+
 # ─── Download function (only called when DOWNLOAD_DB=true) ───────────────────
+# Fetches four classes of files via rsync, then decompresses:
+#   1. nt_euk.NN.tar.gz          — per-volume index archives
+#   2. nt_euk.nal                — multi-volume alias (standalone on NCBI FTP)
+#   3. taxdb.tar.gz              — expands to taxdb.btd + taxdb.bti
+#   4. taxonomy4blast.sqlite3.gz — expands to taxonomy4blast.sqlite3
 _download_nt_euk() {
-  printf "[INFO] Downloading nt_euk volumes from NCBI via rsync...\n"
+  printf "[INFO] Downloading nt_euk + taxonomy files from NCBI via rsync...\n"
   cd "$BLASTDB_DIR"
 
   rsync --list-only --no-motd rsync://ftp.ncbi.nlm.nih.gov/blast/db/ \
-    | awk '/nt_euk.*\.tar\.gz$/ {print $NF}' > nt_euk.links.list
+    | awk '
+        $NF ~ /^nt_euk\.[0-9]+\.tar\.gz$/ { print $NF }
+        $NF == "nt_euk.nal"                { print $NF }
+        $NF == "taxdb.tar.gz"              { print $NF }
+        $NF == "taxonomy4blast.sqlite3.gz" { print $NF }
+      ' > nt_euk.links.list
 
   local n_files
   n_files=$(wc -l < nt_euk.links.list)
-  printf "[INFO] Found %s volume files to download\n" "$n_files"
+  printf "[INFO] Found %s file(s) to download (volumes + alias + taxonomy)\n" "$n_files"
 
   rsync --archive --partial --progress --compress --no-motd \
     --files-from=nt_euk.links.list \
     rsync://ftp.ncbi.nlm.nih.gov/blast/db/ .
 
-  printf "[INFO] Decompressing volumes...\n"
+  printf "[INFO] Decompressing nt_euk volume archives...\n"
   for f in nt_euk.*.tar.gz; do
     [[ -f "$f" ]] || continue
     tar -zxf "$f" && rm -f "$f"
   done
 
-  printf "[OK]   nt_euk download and decompression complete\n"
+  if [[ -f taxdb.tar.gz ]]; then
+    printf "[INFO] Decompressing taxdb.tar.gz...\n"
+    tar -zxf taxdb.tar.gz && rm -f taxdb.tar.gz
+  fi
+
+  if [[ -f taxonomy4blast.sqlite3.gz ]]; then
+    printf "[INFO] Decompressing taxonomy4blast.sqlite3.gz...\n"
+    gunzip -f taxonomy4blast.sqlite3.gz
+  fi
+
+  printf "[OK]   nt_euk + taxonomy download and decompression complete\n"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -192,10 +230,30 @@ fi
 
 # ─── Verify nt_euk is usable ─────────────────────────────────────────────────
 if ! _nt_euk_present; then
-  printf "[ERROR] nt_euk index files not found after download step\n" >&2
+  printf "[ERROR] nt_euk volume files (.nhr) not found after download step\n" >&2
   exit 1
 fi
-printf "[OK]   nt_euk index files verified\n"
+
+# blastdbcmd -taxids 40674 will fail without the alias + taxonomy support
+# files (seen empirically: "Unknown database" or "-taxids requires additional
+# data files"). Check them up front so we fail fast with actionable guidance.
+MISSING_AUX=$(_missing_aux_files)
+if [[ -n "$MISSING_AUX" ]]; then
+  printf "[ERROR] Missing required BLAST auxiliary files in %s:\n" "$BLASTDB_DIR" >&2
+  while IFS= read -r f; do
+    printf "          - %s\n" "$f" >&2
+  done <<< "$MISSING_AUX"
+  printf "\n" >&2
+  printf "        blastdbcmd -taxids needs:\n" >&2
+  printf "          nt_euk.nal             (multi-volume alias)\n" >&2
+  printf "          taxdb.btd / taxdb.bti  (name lookup)\n" >&2
+  printf "          taxonomy4blast.sqlite3 (lineage expansion)\n" >&2
+  printf "\n" >&2
+  printf "        To fetch missing files, resubmit with:\n\n" >&2
+  printf "          DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n\n" >&2
+  exit 1
+fi
+printf "[OK]   nt_euk volumes, alias, and taxonomy files verified\n"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Step 2: Extract Mammalia sequences (Hominidae excluded at search time)
