@@ -10,16 +10,30 @@ IFS=$'\n\t'
 #          ASV-mode jobs on Lonestar6 so missing tools surface here, not
 #          mid-pipeline.
 #
-# Usage:
+# Usage (must be on a compute node — TACC forbids apptainer on login nodes):
+#   idev -t 00:15:00 -p development        # OR submit via sbatch
 #   module load tacc-apptainer
 #   bash scripts/check_asv_deps.sh
 #
 # Exit code:
 #   0  — all required tools and R packages found
-#   1  — one or more dependencies missing (counted in the summary)
+#   1  — dependencies missing, login-node refusal, or container/module not ready
 # ─────────────────────────────────────────────────────────────────────────────
 
 SIF="${SIF:-Apptainer/edna-pipeline.sif}"
+
+# Refuse to run on TACC login nodes. The tacc-apptainer wrapper there prints a
+# multi-line warning banner on every `apptainer exec`, which (a) violates TACC
+# policy and (b) pollutes captured stdout from the R-package probe below.
+HOSTNAME_VAL="$(hostname)"
+if [[ "$HOSTNAME_VAL" == login* ]] && [[ -z "${SLURM_JOB_ID:-}" ]]; then
+  printf "[ERROR] Refusing to run on login node '%s'.\n" "$HOSTNAME_VAL" >&2
+  printf "        TACC forbids apptainer on login nodes. Start a compute session:\n" >&2
+  printf "          idev -t 00:15:00 -p development\n" >&2
+  printf "          module load tacc-apptainer\n" >&2
+  printf "          bash scripts/check_asv_deps.sh\n" >&2
+  exit 1
+fi
 
 if ! command -v apptainer &>/dev/null; then
   printf "[ERROR] apptainer not found in PATH. Run: module load tacc-apptainer\n" >&2
@@ -46,19 +60,23 @@ for t in vsearch NGSpeciesID medaka mafft cd-hit-est cutadapt; do
   fi
 done
 
-# R packages used by pipeline_dada2.R and lca_assignment.R.
+# R packages used by pipeline_dada2.R and lca_assignment.R. Output is fenced
+# with a `RESULT\t` sentinel so any incidental stdout (e.g. TACC wrappers,
+# Bioconductor startup chatter) cannot be mistaken for a probe result.
 printf "[INFO] R packages (Bioconductor):\n"
 R_REPORT=$(apptainer exec "$SIF" Rscript -e '
 suppressMessages({
   for (pkg in c("dada2", "ShortRead", "Biostrings")) {
     tag <- if (requireNamespace(pkg, quietly = TRUE)) "OK" else "MISSING"
-    cat(sprintf("%s\t%s\n", tag, pkg))
+    cat(sprintf("RESULT\t%s\t%s\n", tag, pkg))
   }
 })
 ' 2>/dev/null)
 
-while IFS=$'\t' read -r tag pkg; do
-  [[ -z "$tag" ]] && continue
+R_LINES=0
+while IFS=$'\t' read -r marker tag pkg; do
+  [[ "$marker" == "RESULT" ]] || continue
+  R_LINES=$((R_LINES + 1))
   if [[ "$tag" == "OK" ]]; then
     printf "[OK]      %s\n" "$pkg"
   else
@@ -66,6 +84,12 @@ while IFS=$'\t' read -r tag pkg; do
     MISSING=$((MISSING + 1))
   fi
 done <<< "$R_REPORT"
+
+if (( R_LINES == 0 )); then
+  printf "[ERROR] R-package probe produced no RESULT lines — Rscript may have failed inside the container.\n" >&2
+  printf "        Re-run manually to see stderr: apptainer exec %s Rscript -e 'requireNamespace(\"dada2\")'\n" "$SIF" >&2
+  exit 1
+fi
 
 printf "[INFO] Summary: %d missing dependency(ies)\n" "$MISSING"
 if (( MISSING > 0 )); then
