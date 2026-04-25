@@ -58,6 +58,12 @@ tempCodeRunnerFile.*
 # Internal Claude Code session context (local only)
 CLAUDE.md
 
+# Local-only literature, ELNs, NotebookLM extracts, plans
+contextLiterature/
+
+# Lab notebook PDF (authoritative ELN, kept local)
+Metabarcoding of Environmental DNA from Soil Samples (1).pdf
+
 # Golem / Shiny app
 edna-viz/.Rcheck/
 
