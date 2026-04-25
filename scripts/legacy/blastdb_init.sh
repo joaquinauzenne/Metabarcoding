@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 #
+# DEPRECATED — 2026-04-25
+# ---------------------------------------------------------------
+# This script downloads the full NCBI `nt` database (~600 GB) via
+# update_blastdb.pl. The active DB-build path is now:
+#
+#     DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh
+#
+# which fetches the smaller `nt_euk` (Eukaryota only, ~50 GB) via
+# rsync and extracts a Mammalia-only subset for the eDNA pipeline.
+# update_blastdb.pl was not chosen for the active path because it
+# hard-codes Perl Net::FTP (port 21) and TACC's firewall blocks
+# FTP — see contextLiterature/eln-blastdb-init-deprecation-2026-04-25.md.
+#
+# Kept here for historical reference and as a starting point if
+# full-nt is ever needed again. Not validated against the post-
+# 2026-04 module/XALT fixes — re-test before using.
+# ---------------------------------------------------------------
+#
 #SBATCH --job-name=blastdb_init
 #SBATCH --output=blastdb_init.o%j
 #SBATCH --error=blastdb_init.e%j

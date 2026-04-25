@@ -114,7 +114,7 @@ else
   printf "[WARN] No .nhr index files found matching '%s.*'\n" "$DB_DIR" >&2
   printf "       Available prefixes in %s:\n" "$DB_PARENT" >&2
   ls "$DB_PARENT"/*.nal 2>/dev/null | sed 's/\.nal$//' | xargs -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
-  printf "       Run scripts/blastdb_init.sh or scripts/mammalia_nt_db.sh to build the DB.\n" >&2
+  printf "       Run: DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n" >&2
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -29,11 +29,11 @@ Metabarcoding/
 │   ├── pipeline_dada2.R         # DADA2 experimental ASV branch (Nanopore)
 │   ├── asv_otu_comparison.R     # Concordance comparison across pipeline branches
 │   ├── setup.sh                 # Environment validation and directory init
-│   ├── blastdb_init.sh          # SLURM: download full NCBI nt database
-│   ├── mammalia_nt_db.sh        # SLURM: build Mammalia-only BLAST DB
+│   ├── mammalia_nt_db.sh        # SLURM: download nt_euk + build Mammalia-only BLAST DB
 │   ├── consensus.pl             # BioPerl MSA-to-consensus
 │   ├── blast_taxonomy.sh        # Standalone taxonomy phase
-│   └── ...                      # Additional standalone phase scripts
+│   ├── ...                      # Additional standalone phase scripts
+│   └── legacy/                  # Deprecated scripts kept for reference (e.g., blastdb_init.sh)
 ├── edna-viz/                    # Golem Shiny app (replaces VisualizationApp.qmd)
 │   ├── DESCRIPTION
 │   ├── R/
@@ -123,19 +123,16 @@ bash scripts/setup.sh <RAW_DIR> <DB_DIR> [THREADS] [SETTINGS_FILE]
 
 ## BLAST Database Setup
 
-### Option A: Full NCBI nt database (HPC — SLURM)
+Build the Mammalia BLAST DB on the HPC (SLURM). On first use pass `DOWNLOAD_DB=true` to fetch `nt_euk` (~50 GB Eukaryota subset) plus the required taxonomy files via rsync; subsequent runs reuse the existing download:
 
 ```bash
-sbatch scripts/blastdb_init.sh
+DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh   # first run
+sbatch scripts/mammalia_nt_db.sh                    # subsequent rebuilds
 ```
 
-### Option B: Mammalia-only database (recommended)
+The script extracts Mammalia (taxid 40674) and rebuilds a compact BLAST DB. Hominidae (taxid 9604) is excluded at search time by `pipeline.sh`'s `blastn -negative_taxids 9604`, not at extraction.
 
-```bash
-sbatch scripts/mammalia_nt_db.sh
-```
-
-Builds a filtered database (Mammalia taxid 40674, excluding Hominidae) — dramatically reduces search space and runtime.
+> Full-NCBI-`nt` builds via `update_blastdb.pl` were retired on 2026-04-25 (see `scripts/legacy/blastdb_init.sh`). FTP is firewalled on TACC and `nt_euk` covers all eukaryotic targets.
 
 ---
 
