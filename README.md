@@ -308,4 +308,4 @@ Defined in `misc/primers.txt` (format: `name:forward:reverse`):
 - Container definitions (`Docker/`, `Apptainer/`) ensure computational reproducibility
 - Example data provided in `examples/` for testing the visualization app
 
-*Note: This repository has been modified recently with the usage of agentic AI, specifically Claude Code, to ameliorate its structure. This repository remains in progress under my personal direction.*
+*Note: This repository has been modified recently with the usage of agentic AI, specifically Claude Code, to ameliorate its structure. This repository remains in progress under my personal direction. -JA*
