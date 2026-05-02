@@ -103,7 +103,32 @@ BLASTDB_DIR="$WORK/Metabarcoding/blastdb"
 DB_PREFIX="${BLASTDB_DIR}/nt_euk"
 OUT_PREFIX="${BLASTDB_DIR}/mammalia_nt"
 STALE_DAYS="${STALE_DAYS:-90}"              # age threshold for staleness warning
-DOWNLOAD_DB="${DOWNLOAD_DB:-false}"         # must be explicitly set to "true"
+
+# ─── Prompt for DOWNLOAD_DB if unset (only in interactive mode) ────────────────
+if [[ -z "${DOWNLOAD_DB:-}" ]]; then
+  if [[ -t 0 ]]; then
+    # Interactive: stdin is a TTY, prompt the user
+    printf "\nDownload / refresh nt_euk from NCBI? (~400 GB, several hours)\n"
+    printf "  [1] Use existing nt_euk (skip download)\n"
+    printf "  [2] Download / refresh nt_euk from NCBI via rsync\n"
+    read -rp "Choice [1/2, default=1]: " DL_CHOICE
+    case "${DL_CHOICE:-1}" in
+      2) DOWNLOAD_DB=true  ;;
+      *) DOWNLOAD_DB=false ;;
+    esac
+  else
+    # Non-interactive (batch job): stdin is not a TTY, require explicit env var
+    printf "[ERROR] DOWNLOAD_DB not set and stdin is not a TTY (batch mode).\n" >&2
+    printf "        Set DOWNLOAD_DB before submitting:\n" >&2
+    printf "          DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n" >&2
+    printf "        Or run interactively in idev:\n" >&2
+    printf "          idev -t 00:15:00 -p development\n" >&2
+    printf "          bash scripts/mammalia_nt_db.sh\n" >&2
+    exit 1
+  fi
+else
+  DOWNLOAD_DB="${DOWNLOAD_DB}"              # already set, use as-is
+fi
 
 mkdir -p "$BLASTDB_DIR" logs
 
