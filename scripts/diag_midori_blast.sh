@@ -37,7 +37,6 @@ MIDORI2_URL="${MIDORI2_URL:-}"
 TEST_DIR="${TEST_DIR:-$WORK/Metabarcoding/midori_test}"
 SIF="${SIF:-$WORK/Metabarcoding/Apptainer/edna-pipeline.sif}"
 BLASTDB_DIR="${BLASTDB_DIR:-$WORK/Metabarcoding/blastdb}"
-MAMMALIA_DB="${BLASTDB_DIR}/mammalia_nt"
 
 # ─── Login-node guard ────────────────────────────────────────────────────────
 HOSTNAME_VAL="$(hostname)"
@@ -66,12 +65,6 @@ set -u
 
 if [[ ! -f "$SIF" ]]; then
   printf "[ERROR] Container not found: %s\n" "$SIF" >&2
-  exit 1
-fi
-
-if [[ ! -f "${MAMMALIA_DB}.nhr" ]]; then
-  printf "[ERROR] mammalia_nt DB not found at %s\n" "$MAMMALIA_DB" >&2
-  printf "        Run Phase A (extract_mammalia_from_partial_nt_euk.sh) first.\n" >&2
   exit 1
 fi
 
@@ -136,27 +129,24 @@ else
   printf "[OK]   makeblastdb complete\n"
 fi
 
-# ─── Step 4: Extract a test query from mammalia_nt ──────────────────────────
-printf "\n[INFO] Step 4: Extract test query from mammalia_nt\n"
+# ─── Step 4: Extract test query from MIDORI2 FASTA (self-query) ──────────────
+printf "\n[INFO] Step 4: Extract test query from MIDORI2 FASTA\n"
 
+# Use the first sequence from the MIDORI2 FASTA itself as the query. A self-query
+# guarantees hits at 100% identity and directly tests whether staxids/sscinames
+# are populated — which is the real concern. No dependency on mammalia_nt.
 TEST_QUERY="${TEST_DIR}/test_query.fasta"
-BLASTDB_MAMMALIA="$BLASTDB_DIR"
 
 if [[ -f "$TEST_QUERY" ]]; then
   printf "[SKIP] test_query.fasta already present\n"
 else
-  # Pull the first entry from mammalia_nt as a known-good mammalian sequence
-  apptainer exec \
-    --bind "$WORK":"$WORK" \
-    --env "BLASTDB=$BLASTDB_MAMMALIA" \
-    "$SIF" \
-    blastdbcmd \
-      -db "$MAMMALIA_DB" \
-      -entry all \
-      -outfmt "%f" \
-      -max_entries 1 \
-      -out "$TEST_QUERY"
-  printf "[OK]   Test query written: %s\n" "$TEST_QUERY"
+  awk '/^>/{if(n++)exit; print; next} n' "$FASTA" > "$TEST_QUERY"
+  printf "[OK]   Test query extracted from MIDORI2 FASTA\n"
+fi
+
+if [[ ! -s "$TEST_QUERY" ]]; then
+  printf "[ERROR] Failed to extract first sequence from MIDORI2 FASTA\n" >&2
+  exit 1
 fi
 
 QUERY_ID=$(grep '^>' "$TEST_QUERY" | head -1 | awk '{print $1}' | tr -d '>')

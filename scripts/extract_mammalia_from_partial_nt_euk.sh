@@ -138,24 +138,46 @@ printf "[OK]   %s written (%d volumes)\n" "$PARTIAL_NAL" "$N_VOLS"
 # Step 3: Extract Mammalia FASTA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-printf "\n[INFO] Step 3: Extract Mammalia (taxid %d) — may take 30–90 min\n" "$MAMMALIA_TAXID"
+printf "\n[INFO] Step 3: Extract Mammalia (taxid %d) — per-volume loop (%d volumes); 30–90 min\n" \
+  "$MAMMALIA_TAXID" "$N_VOLS"
 
-apptainer exec \
-  --bind "$WORK":"$WORK" \
-  --env "BLASTDB=$BLASTDB_DIR" \
-  "$SIF" \
-  blastdbcmd \
-    -db "${BLASTDB_DIR}/nt_euk_partial" \
-    -taxids "$MAMMALIA_TAXID" \
-    -outfmt "%f" \
-    -out "$MAMMALIA_FASTA"
+# Per-volume loop avoids the BLAST4/BLAST5 alias blocker: the container's blastdbcmd
+# (BLAST+ ≥2.12) looks for .ndb files when resolving a .nal alias, but these volumes
+# were created in BLAST4 format (.nhr/.nin/.nsq only). Individual volumes are addressed
+# directly and do not trigger the alias resolver.
+: > "$MAMMALIA_FASTA"
+
+VOLS_OK=0
+VOLS_FAIL=0
+for vol in "${EXTRACTED_VOLS[@]}"; do
+  apptainer exec \
+    --bind "$WORK":"$WORK" \
+    --env "BLASTDB=$BLASTDB_DIR" \
+    "$SIF" \
+    blastdbcmd \
+      -db "${BLASTDB_DIR}/${vol}" \
+      -taxids "$MAMMALIA_TAXID" \
+      -outfmt "%f" \
+    >> "$MAMMALIA_FASTA" 2>/dev/null \
+    && VOLS_OK=$((VOLS_OK + 1)) \
+    || { printf "[WARN] blastdbcmd failed on %s — skipping\n" "$vol" >&2
+         VOLS_FAIL=$((VOLS_FAIL + 1)); }
+done
+
+printf "[INFO] Volumes processed: %d OK, %d skipped\n" "$VOLS_OK" "$VOLS_FAIL"
+
+if (( VOLS_FAIL == N_VOLS )); then
+  printf "[ERROR] All %d volumes failed — blastdbcmd cannot read BLAST4 individual volumes.\n" "$N_VOLS" >&2
+  printf "        Phase A is not viable. Proceed to Phase B (MIDORI2 / EDirect).\n" >&2
+  exit 1
+fi
 
 NSEQ=$(grep -c '^>' "$MAMMALIA_FASTA" 2>/dev/null || echo 0)
 FASTA_KB=$(du -sk "$MAMMALIA_FASTA" 2>/dev/null | cut -f1 || echo 0)
 printf "[OK]   Extracted %s sequences (FASTA: %s KB)\n" "$NSEQ" "$FASTA_KB"
 
 if (( NSEQ == 0 )); then
-  printf "[ERROR] Extraction produced 0 sequences — check nt_euk_partial.nal and taxonomy aux files\n" >&2
+  printf "[ERROR] Extraction produced 0 sequences — all volumes may lack Mammalia entries\n" >&2
   exit 1
 fi
 if (( FASTA_KB < FASTA_MIN_KB )); then
