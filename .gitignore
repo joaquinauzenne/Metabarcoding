@@ -57,6 +57,7 @@ tempCodeRunnerFile.*
 
 # Internal Claude Code session context (local only)
 CLAUDE.md
+.claude/
 
 # Local-only literature, ELNs, NotebookLM extracts, plans
 contextLiterature/

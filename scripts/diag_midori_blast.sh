@@ -19,9 +19,9 @@ IFS=$'\n\t'
 #   Set MIDORI2_URL to the download URL of a small MIDORI2 FASTA
 #   (UNIQ flavour, .fasta.gz).  Find current URLs at:
 #     https://www.reference-midori.info/download.php
-#   Example (GenBank release 264, 12S srRNA):
-#     MIDORI2_URL="https://www.reference-midori.info/download/Databases/GB264/\
-# BLAST_sp/uniq/MIDORI2_UNIQ_NUC_GB264_srRNA_12S_BLAST.fasta.gz"
+#   Example (GenBank release 270, 12S srRNA — GB270 uses .fasta.zip, not .fasta.gz):
+#     MIDORI2_URL="https://www.reference-midori.info/download/Databases/\
+# GenBank270_2026-02-15/BLAST/uniq/fasta/MIDORI2_UNIQ_NUC_GB270_srRNA_BLAST.fasta.zip"
 #
 # Run inside an idev compute session (NOT on a login node):
 #   idev -t 00:30:00 -p development
@@ -81,15 +81,33 @@ export BLASTDB="$TEST_DIR"
 # ─── Step 1: Download MIDORI2 reference FASTA ────────────────────────────────
 printf "\n[INFO] Step 1: Download MIDORI2 reference FASTA\n"
 
-FASTA_GZ="${TEST_DIR}/midori_ref.fasta.gz"
+case "$MIDORI2_URL" in
+  *.fasta.gz)  DOWNLOAD_FILE="${TEST_DIR}/midori_ref.fasta.gz";  ARCHIVE_FMT="gz"  ;;
+  *.fasta.zip) DOWNLOAD_FILE="${TEST_DIR}/midori_ref.fasta.zip"; ARCHIVE_FMT="zip" ;;
+  *.zip)       DOWNLOAD_FILE="${TEST_DIR}/midori_ref.zip";       ARCHIVE_FMT="zip" ;;
+  *)           DOWNLOAD_FILE="${TEST_DIR}/midori_ref.fasta";     ARCHIVE_FMT="none" ;;
+esac
 FASTA="${TEST_DIR}/midori_ref.fasta"
 MIDORI_DB="${TEST_DIR}/midori_test"
 
 if [[ -f "$FASTA" ]]; then
   printf "[SKIP] FASTA already present: %s\n" "$FASTA"
 else
-  curl -fSL --retry 3 --retry-delay 5 -o "$FASTA_GZ" "$MIDORI2_URL"
-  gunzip -f "$FASTA_GZ"
+  curl -fSL --retry 3 --retry-delay 5 -o "$DOWNLOAD_FILE" "$MIDORI2_URL"
+  case "$ARCHIVE_FMT" in
+    gz)
+      gunzip -f "$DOWNLOAD_FILE"
+      ;;
+    zip)
+      # Extract the first .fasta entry from the zip into TEST_DIR, then normalise the name
+      unzip -o -j "$DOWNLOAD_FILE" "*.fasta" -d "$TEST_DIR"
+      extracted=$(find "$TEST_DIR" -maxdepth 1 -name "*.fasta" ! -name "midori_ref.fasta" | head -1)
+      [[ -n "$extracted" ]] && mv "$extracted" "$FASTA"
+      ;;
+    none)
+      : # plain FASTA downloaded directly — DOWNLOAD_FILE == FASTA
+      ;;
+  esac
   printf "[OK]   Downloaded and decompressed\n"
 fi
 
