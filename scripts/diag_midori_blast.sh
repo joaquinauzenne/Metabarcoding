@@ -121,7 +121,7 @@ fi
 
 # ─── Step 2: Check header format ────────────────────────────────────────────
 printf "\n[INFO] Step 2: Inspect FASTA header format\n"
-SAMPLE_HEADER=$(grep '^>' "$FASTA" | head -1)
+SAMPLE_HEADER=$(grep '^>' "$FASTA" | head -1 || true)
 printf "[INFO] Sample header: %s\n" "$SAMPLE_HEADER"
 
 # MIDORI2 UNIQ (BLAST flavour) headers look like:
@@ -167,7 +167,7 @@ if [[ ! -s "$TEST_QUERY" ]]; then
   exit 1
 fi
 
-QUERY_ID=$(grep '^>' "$TEST_QUERY" | head -1 | awk '{print $1}' | tr -d '>')
+QUERY_ID=$(grep '^>' "$TEST_QUERY" | head -1 | awk '{print $1}' | tr -d '>' || true)
 printf "[INFO] Query accession: %s\n" "$QUERY_ID"
 
 # ─── Step 5: BLAST query against MIDORI2 DB ──────────────────────────────────
