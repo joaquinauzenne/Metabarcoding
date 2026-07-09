@@ -1,3 +1,8 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED (2026-07-02): this package is superseded by the Golem app edna-viz/.
+# Reference only; not actively developed. See iucnranges/DEPRECATED.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
 #' Initialize IUCN API key
 #'
 #' @param key character; IUCN Red List API token (defaults to IUCN_REDLIST_KEY env var)

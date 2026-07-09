@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED — moved to scripts/legacy/ on 2026-07-02 (reference only).
+#   Phase A recovery from stranded nt_euk volumes; abandoned. Superseded by
+#   scripts/build_midori_db.sh (MIDORI2). See scripts/README.md.
+# ─────────────────────────────────────────────────────────────────────────────
 # set -eo pipefail before module load; -u deferred (TACC bash-completion references
 # BASH_COMPLETION_DEBUG without a default, which aborts under set -u).
 set -eo pipefail

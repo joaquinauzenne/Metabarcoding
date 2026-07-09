@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED — moved to scripts/legacy/ on 2026-07-02 (reference only).
+#   Phase A (nt_euk -> Mammalia BLAST DB) was abandoned; see
+#   contextLiterature/eln-phase-a-dead-blast4-nt-euk-2026-05-13.md.
+#   Superseded by scripts/build_midori_db.sh (MIDORI2). See scripts/README.md.
+# ─────────────────────────────────────────────────────────────────────────────
 #SBATCH --job-name=mammalia_nt_db
 #SBATCH --output=logs/mammalia_nt_%j.out
 #SBATCH --error=logs/mammalia_nt_%j.err

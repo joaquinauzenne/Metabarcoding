@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED — moved to scripts/legacy/ on 2026-07-02 (reference only).
+#   Standalone Cutadapt trimmer, superseded by pipeline.sh Phase 1
+#   (preprocess_reads). Note: had an INPUT_DIR="$" bug. See scripts/README.md.
+# ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 # ----------------------------------------------------------------------

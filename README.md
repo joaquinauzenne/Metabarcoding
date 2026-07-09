@@ -15,7 +15,7 @@ This pipeline converts raw Nanopore basecalled reads into taxonomic identificati
 5. Applying Lowest Common Ancestor (LCA) post-processing for robust taxonomic resolution
 6. Visualizing species detections and IUCN range maps interactively via the `edna-viz` Shiny app
 
-Designed to run on the Lonestar6 HPC system (TACC) using Apptainer containers, with local WSL development.
+Designed to run on the Lonestar6 HPC system (TACC) using Apptainer containers or with local WSL/Linux development environment.
 
 ---
 

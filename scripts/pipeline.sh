@@ -29,7 +29,21 @@ set -euo pipefail
 #                from consensus without re-trimming. Mirrors PIMENTA's Runmodules param.
 # ─────────────────────────────────────────────────────────────────────────────
 
-SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")")"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Load pipeline configuration (single source of truth) ─────────────────────
+# All tunable parameters live in config/pipeline.yaml. Override the path with
+# PIPELINE_CONFIG=/path/to/config.yaml if needed. Parsed into CFG_* shell vars.
+PIPELINE_CONFIG="${PIPELINE_CONFIG:-$SCRIPTS_DIR/../config/pipeline.yaml}"
+if [[ ! -f "$PIPELINE_CONFIG" ]]; then
+  printf "[ERROR] Pipeline config not found: %s\n" "$PIPELINE_CONFIG" >&2
+  printf "        Set PIPELINE_CONFIG or create config/pipeline.yaml\n" >&2
+  exit 1
+fi
+# shellcheck source=lib/parse_yaml.sh
+source "$SCRIPTS_DIR/lib/parse_yaml.sh"
+eval "$(parse_yaml "$PIPELINE_CONFIG" CFG_)"
+printf "[INFO] Loaded config: %s\n" "$PIPELINE_CONFIG"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 1 — Adapter trimming and quality filtering (Cutadapt).
@@ -43,7 +57,7 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")")"
 preprocess_reads() {
   local INPUT_DIR="${1%/}"
   local OUTPUT_DIR="${2%/}"
-  local MIN_QUAL=12 MIN_LEN=10 MAX_LEN=1100
+  local MIN_QUAL="$CFG_cutadapt_min_qual" MIN_LEN="$CFG_cutadapt_min_len" MAX_LEN="$CFG_cutadapt_max_len"
 
   mkdir -p "$OUTPUT_DIR"
   printf "[INFO] Phase 1: preprocessing reads -> %s\n" "$OUTPUT_DIR"
@@ -64,7 +78,7 @@ preprocess_reads() {
 
     printf "[INFO] Trimming & filtering: %s\n" "$REL"
     python -m cutadapt \
-      --poly-a --trim-n --max-n 0.05 \
+      --poly-a --trim-n --max-n "$CFG_cutadapt_max_n" \
       --minimum-length "$MIN_LEN" --maximum-length "$MAX_LEN" \
       --quality-cutoff "$MIN_QUAL" --cores 0 \
       -o "$OUT" "$IN"
@@ -237,14 +251,14 @@ run_consensus() {
       printf "[INFO]   [ASV] Dereplicating: %s\n" "$sample"
       vsearch --derep_fulllength "$fq" \
               --output "$outdir/${sample}_derep.fasta" \
-              --sizeout --minuniquesize 2
+              --sizeout --minuniquesize "$CFG_vsearch_minuniquesize"
 
       # NGSpeciesID with higher sensitivity for ASV resolution
       NGSpeciesID --fastq "$fq" \
-                  --q 10.0 --ont --consensus --medaka \
-                  --m 550 --s 550 --sample_size 100 \
-                  --consensus_n_rounds 3 \
-                  --abundance_ratio 0.01 \
+                  --q "$CFG_ngspeciesid_q" --ont --consensus --medaka \
+                  --m "$CFG_ngspeciesid_m" --s "$CFG_ngspeciesid_s" --sample_size "$CFG_ngspeciesid_sample_size" \
+                  --consensus_n_rounds "$CFG_ngspeciesid_consensus_n_rounds" \
+                  --abundance_ratio "$CFG_ngspeciesid_abundance_ratio" \
                   --outfolder "$outdir"
     done
     set +x
@@ -263,8 +277,8 @@ run_consensus() {
         continue
       fi
       NGSpeciesID --fastq "$fq" \
-                  --q 10.0 --ont --consensus --medaka \
-                  --m 550 --s 550 --sample_size 100 \
+                  --q "$CFG_ngspeciesid_q" --ont --consensus --medaka \
+                  --m "$CFG_ngspeciesid_m" --s "$CFG_ngspeciesid_s" --sample_size "$CFG_ngspeciesid_sample_size" \
                   --outfolder "$outdir"
     done
     set +x
@@ -303,13 +317,13 @@ run_consensus() {
 
       printf "[INFO]   [ASV] CD-HIT-EST @100%% deduplication -> %s\n" "$CDHIT_OUT"
       cd-hit-est -i "$NOCHIM_FASTA" -o "$CDHIT_OUT" \
-                 -c 1.0 -aS 0.95 -T "$THREADS" -M 0 -d 0
+                 -c "$CFG_cdhit_identity" -aS "$CFG_cdhit_asv_coverage" -T "$THREADS" -M 0 -d 0
 
       # primer trimming on ASV representatives
       printf "[INFO]   [ASV] Primer trimming of %s\n" "$CDHIT_OUT"
       for e in "${PRIMERS[@]}"; do
         IFS=":" read -r name fwd rev <<<"$e"
-        cutadapt -g "^${fwd}" -a "${rev}\$" -e 0.15 -O 25 --fasta \
+        cutadapt -g "^${fwd}" -a "${rev}\$" -e "$CFG_primer_trim_error_rate" -O "$CFG_primer_trim_min_overlap" --fasta \
           -o "$MARKER_OUT/${name}_asvs.fasta" \
           "$CDHIT_OUT"
       done
@@ -322,7 +336,7 @@ run_consensus() {
       local CDHIT_OUT="$COMBINED_OUT/combined_cdhit100.fasta"
       if [[ ! -f "$CDHIT_OUT" ]]; then
         printf "[INFO]   CD-HIT-EST @100%% -> %s\n" "$CDHIT_OUT"
-        cd-hit-est -i "$ALL_CONS" -o "$CDHIT_OUT" -c 1.00 -T "$THREADS" -M 0 -d 0
+        cd-hit-est -i "$ALL_CONS" -o "$CDHIT_OUT" -c "$CFG_cdhit_identity" -T "$THREADS" -M 0 -d 0
       fi
 
       # per-cluster MSA & consensus
@@ -373,7 +387,7 @@ run_consensus() {
       printf "[INFO]   Primer-based trimming of %s\n" "$FINAL_CONS_FASTA"
       for e in "${PRIMERS[@]}"; do
         IFS=":" read -r name fwd rev <<<"$e"
-        cutadapt -g "^${fwd}" -a "${rev}\$" -e 0.15 -O 25 --fasta \
+        cutadapt -g "^${fwd}" -a "${rev}\$" -e "$CFG_primer_trim_error_rate" -O "$CFG_primer_trim_min_overlap" --fasta \
           -o "$MARKER_OUT/${name}_consensus.fasta" \
           "$FINAL_CONS_FASTA"
       done
@@ -397,7 +411,7 @@ run_consensus() {
 
         for e in "${PRIMERS[@]}"; do
           IFS=":" read -r name fwd rev <<<"$e"
-          cutadapt -g "^${fwd}" -a "${rev}\$" -e 0.15 -O 25 --fasta \
+          cutadapt -g "^${fwd}" -a "${rev}\$" -e "$CFG_primer_trim_error_rate" -O "$CFG_primer_trim_min_overlap" --fasta \
             -o "$pbdir/${sample}_${name}_trimmed.fasta" \
             "$pooled"
         done
@@ -481,13 +495,13 @@ blast_taxonomy() {
   printf "\n"
 
   if [[ -d "$DB_DIR" ]]; then
-    DB_OPT="-db $DB_DIR/nt"
+    DB_OPT="-db $DB_DIR/$CFG_blast_db_name"
     THREAD_OPT="-num_threads $THREADS"
-    FILTER_OPT="-taxids 40674 -negative_taxids 9604"
+    FILTER_OPT="-taxids $CFG_blast_taxid -negative_taxids $CFG_blast_negative_taxid"
   else
     DB_OPT="-remote -db $DB_DIR"
     THREAD_OPT=""
-    FILTER_OPT="-entrez_query 'Mammalia[Organism] NOT Hominidae[Organism]'"
+    FILTER_OPT="-entrez_query '$CFG_blast_entrez_query'"
   fi
 
   printf "[INFO] Using BLAST options: %s %s\n\n" "$DB_OPT" "$THREAD_OPT"
@@ -503,21 +517,22 @@ blast_taxonomy() {
     printf "[INFO]   [%s] BLASTn megablast (17-col) -> %s/blast_all.tsv\n" "$sample" "$outdir"
     blastn -task megablast \
            $DB_OPT \
+           $FILTER_OPT \
            -query "$fasta" \
-           -perc_identity 97 \
-           -qcov_hsp_perc 90 \
-           -max_target_seqs 100 \
-           -evalue 1e-6 \
+           -perc_identity "$CFG_blast_perc_identity" \
+           -qcov_hsp_perc "$CFG_blast_qcov_hsp_perc" \
+           -max_target_seqs "$CFG_blast_max_target_seqs" \
+           -evalue "$CFG_blast_evalue" \
            -outfmt '6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle qcovs' \
            $THREAD_OPT \
            -out "$outdir/blast_all.tsv"
 
     # Derive Krona format (15-col: cols 1-14 + 16, skipping scomnames at col 15)
-    awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16}' \
+    awk -F'\t' 'BEGIN{OFS="\t"}{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16}' \
         "$outdir/blast_all.tsv" > "$outdir/blast.tsv"
 
     # Derive Golem app format (10-col: qseqid sseqid pident qcovs evalue bitscore staxids sscinames scomnames stitle)
-    awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$17,$11,$12,$13,$14,$15,$16}' \
+    awk -F'\t' 'BEGIN{OFS="\t"}{print $1,$2,$3,$17,$11,$12,$13,$14,$15,$16}' \
         "$outdir/blast_all.tsv" > "$outdir/blast_results.tsv"
 
     printf "[INFO]         Generating Krona chart -> %s/krona.html\n" "$outdir"
@@ -532,20 +547,20 @@ blast_taxonomy() {
          $DB_OPT \
          $FILTER_OPT \
          -query "$CONS_BASE/combined/final_consensus.fasta" \
-         -perc_identity 97 \
-         -qcov_hsp_perc 90 \
-         -max_target_seqs 100 \
-         -evalue 1e-6 \
+         -perc_identity "$CFG_blast_perc_identity" \
+         -qcov_hsp_perc "$CFG_blast_qcov_hsp_perc" \
+         -max_target_seqs "$CFG_blast_max_target_seqs" \
+         -evalue "$CFG_blast_evalue" \
          -outfmt '6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle qcovs' \
          $THREAD_OPT \
          -out "$CONS_BASE/combined/taxonomy/blast_all.tsv"
 
   # Derive Krona format (15-col: cols 1-14 + 16, skipping scomnames at col 15)
-  awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16}' \
+  awk -F'\t' 'BEGIN{OFS="\t"}{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$16}' \
       "$CONS_BASE/combined/taxonomy/blast_all.tsv" > "$CONS_BASE/combined/taxonomy/blast.tsv"
 
   # Derive Golem app format (10-col: qseqid sseqid pident qcovs evalue bitscore staxids sscinames scomnames stitle)
-  awk 'BEGIN{OFS="\t"}{print $1,$2,$3,$17,$11,$12,$13,$14,$15,$16}' \
+  awk -F'\t' 'BEGIN{OFS="\t"}{print $1,$2,$3,$17,$11,$12,$13,$14,$15,$16}' \
       "$CONS_BASE/combined/taxonomy/blast_all.tsv" > "$CONS_BASE/combined/taxonomy/blast_results.tsv"
 
   printf "[INFO]   LCA assignment -> combined/taxonomy/taxonomy.tsv\n"
@@ -597,7 +612,9 @@ SETTINGS_FILE="$CONS_BASE/run_settings.txt"
   printf "MODE:        %s\n" "$MODE"
   printf "MODULES:     %s\n" "$MODULES"
   [[ -n "$PRIMER_FILE" ]] && printf "PRIMER_FILE: %s\n" "$PRIMER_FILE"
-  printf "BLAST thresholds: pident>=97, qcov>=90, evalue<=1e-6, bitscore_margin=0.98\n"
+  printf "CONFIG:      %s\n" "$PIPELINE_CONFIG"
+  printf "BLAST thresholds: pident>=%s, qcov>=%s, evalue<=%s, bitscore_margin=%s\n" \
+    "$CFG_blast_perc_identity" "$CFG_blast_qcov_hsp_perc" "$CFG_blast_evalue" "$CFG_blast_bitscore_margin"
 } > "$SETTINGS_FILE"
 printf "[INFO] Settings written to %s\n" "$SETTINGS_FILE"
 

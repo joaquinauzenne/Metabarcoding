@@ -4,6 +4,10 @@ output: html_document
 runtime: shiny
 ---
 
+> **⚠ DEPRECATED (2026-07-02).** This Quarto/Shiny prototype is superseded by the
+> Golem app in `edna-viz/`. Kept for reference only; not actively developed.
+> See `scripts/README.md` and the project consolidation plan.
+
 ```{r setup, include=FALSE}
 # Load required libraries
 library(shiny)

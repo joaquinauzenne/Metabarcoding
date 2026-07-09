@@ -32,8 +32,9 @@ output_dir  <- args[2]
 threads     <- if (length(args) >= 3) as.integer(args[3]) else 1L
 
 # ── Primer set config ──────────────────────────────────────────────────────────
-# Set PRIMER_SET, MIN_LEN, MAX_LEN, and MAX_EE to match your library.
-# Run the script, then inspect quality_profiles.pdf to validate MAX_EE.
+# Length bounds (MIN_LEN/MAX_LEN) and MAX_EE are read from config/pipeline.yaml
+# (the `primers:` map) keyed by the selected PRIMER_SET — see the logic below.
+# The table below is reference-only; edit the values in the config, not here.
 #
 # Supported primer sets and expected amplicon sizes:
 #   12S — Ushio et al. 2017:        ~160 bp → MIN_LEN = 130, MAX_LEN = 200
@@ -43,15 +44,60 @@ threads     <- if (length(args) >= 3) as.integer(args[3]) else 1L
 #   16S — Lynggaard et al. 2024:    ~300 bp → MIN_LEN = 250, MAX_LEN = 370
 #   16S — Franklin et al. 2019:     ~330 bp → MIN_LEN = 280, MAX_LEN = 400
 #
-# *** SET THESE BEFORE RUNNING — do not leave at default from a previous run ***
-PRIMER_SET <- "16S_Boessenkool"  # change to match your actual library
-MIN_LEN    <- 70L                # lower bound (bp) — ~80% of expected amplicon
-MAX_LEN    <- 120L               # upper bound (bp) — ~130% of expected amplicon
+# ── Read per-primer bounds from config/pipeline.yaml (reviewer m6 fix) ─────────
+# No hardcoded length bounds. The selected primer set must exist under `primers:`
+# in the config AND be marked `verified: true`; otherwise we REFUSE to run rather
+# than silently discard reads with bounds tuned for a different primer set.
+#
+# Specify the primer set as the 4th arg or the PRIMER_SET env var:
+#   Rscript pipeline_dada2.R <trimmed_dir> <output_dir> <threads> <PRIMER_SET>
+#   PRIMER_SET=Riaz12S-V5 Rscript pipeline_dada2.R <trimmed_dir> <output_dir> <threads>
+if (!requireNamespace("yaml", quietly = TRUE)) {
+  stop("The 'yaml' R package is required to read config/pipeline.yaml ",
+       "(conda: r-yaml). Install it and re-run.", call. = FALSE)
+}
 
-# maxEE: calibrate against NanoPlot quality distributions from Phase 2.
-# At Q12 (typical Nanopore), expected errors accumulate ~1 per 16 bp.
-# Verify against quality_profiles.pdf before committing to this value.
-MAX_EE <- 5
+.script_dir <- {
+  cargs <- commandArgs(trailingOnly = FALSE)
+  farg <- grep("^--file=", cargs, value = TRUE)
+  if (length(farg) == 1L) dirname(normalizePath(sub("^--file=", "", farg))) else getwd()
+}
+config_path <- Sys.getenv("PIPELINE_CONFIG",
+                          unset = file.path(.script_dir, "..", "config", "pipeline.yaml"))
+if (!file.exists(config_path)) {
+  stop("Pipeline config not found: ", config_path,
+       "\n  Set PIPELINE_CONFIG or create config/pipeline.yaml", call. = FALSE)
+}
+
+PRIMER_SET <- if (length(args) >= 4L && nzchar(args[4])) args[4] else Sys.getenv("PRIMER_SET", unset = "")
+if (!nzchar(PRIMER_SET)) {
+  stop("No primer set specified. Pass it as the 4th argument or set PRIMER_SET.\n",
+       "  Available sets are the keys under `primers:` in ", config_path, call. = FALSE)
+}
+
+.cfg <- yaml::read_yaml(config_path)
+.p <- .cfg$primers[[PRIMER_SET]]
+if (is.null(.p)) {
+  stop("Primer set '", PRIMER_SET, "' not found under `primers:` in ", config_path,
+       ".\n  Add an entry (min_len, max_len, max_ee, verified) before running.",
+       call. = FALSE)
+}
+if (!isTRUE(.p$verified)) {
+  stop("Primer set '", PRIMER_SET, "' is not marked verified in ", config_path, ".\n",
+       "  The min_len/max_len there are PROVISIONAL. Confirm them against the primer's\n",
+       "  amplicon size and this run's NanoPlot, calibrate max_ee against\n",
+       "  quality_profiles.pdf, then set `verified: true` for '", PRIMER_SET, "'.",
+       call. = FALSE)
+}
+if (is.null(.p$min_len) || is.null(.p$max_len) || is.null(.p$max_ee)) {
+  stop("Primer set '", PRIMER_SET, "' must define min_len, max_len, and max_ee in ",
+       config_path, call. = FALSE)
+}
+MIN_LEN <- as.integer(.p$min_len)
+MAX_LEN <- as.integer(.p$max_len)
+MAX_EE  <- as.numeric(.p$max_ee)
+message(sprintf("Primer set: %s | MIN_LEN=%d | MAX_LEN=%d | MAX_EE=%g (from %s)",
+                PRIMER_SET, MIN_LEN, MAX_LEN, MAX_EE, config_path))
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 

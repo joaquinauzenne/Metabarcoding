@@ -1,17 +1,21 @@
 Bootstrap: docker
-From: condaforge/miniforge3:latest
+# Base image pinned for reproducibility (was :latest). Adjust the tag from
+# https://hub.docker.com/r/condaforge/miniforge3/tags if you need a newer conda.
+From: condaforge/miniforge3:24.9.2-0
 
 %labels
     Author    JoaquinAuzenne
-    Version   1.2
+    Version   1.3
 
 %post
     # condaforge/miniforge3 base already provides mamba, conda, wget, curl.
     # No apt-get or Miniforge download needed — avoids HPC outbound HTTP restrictions.
 
+    # Enforce strict channel priority for reproducible, conflict-free solves.
+    conda config --set channel_priority strict
+
     # Create the edna-pipeline environment with all pipeline tools.
-    # Adds the four that were missing from the original pack:
-    #   seqtk, vsearch, r-base (+r-tidyverse), krona (ktImportText).
+    #   r-yaml — lets pipeline_dada2.R read config/pipeline.yaml (reviewer m6 fix).
     mamba create -y -n edna-pipeline \
         -c conda-forge -c bioconda \
         python=3.10 \
@@ -31,7 +35,17 @@ From: condaforge/miniforge3:latest
         r-base \
         r-tidyverse \
         r-dplyr \
-        r-ggplot2
+        r-ggplot2 \
+        r-yaml
+
+    # NanoSim (M1 validation harness) lives in its OWN env: NGSpeciesID pulls
+    # medaka, whose TensorFlow/Python pins would likely conflict with NanoSim's
+    # scientific-stack deps in a shared solve. Invoke it by explicit path, e.g.
+    #   /opt/conda/envs/nanosim/bin/read_analysis.py
+    #   /opt/conda/envs/nanosim/bin/simulator.py
+    mamba create -y -n nanosim \
+        -c conda-forge -c bioconda \
+        nanosim
 
     # Initialise Krona taxonomy database.
     /opt/conda/envs/edna-pipeline/opt/krona/updateTaxonomy.sh 2>/dev/null || true

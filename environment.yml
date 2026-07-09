@@ -1,0 +1,42 @@
+# environment.yml — canonical conda SPEC for the eDNA pipeline (main env).
+#
+# This is the human-authored spec (unpinned by design). The reproducible LOCK
+# (exact versions + build strings) is generated FROM a built container and
+# committed alongside it — versions are not fabricated here:
+#
+#   apptainer exec Apptainer/edna-pipeline.sif \
+#     conda list -n edna-pipeline --export > environment.lock.txt
+#
+# scripts/setup.sh also captures this automatically each run as
+# logs/env_snapshot_<timestamp>.txt. Commit environment.lock.txt after the
+# container is (re)built to freeze the reproducible state.
+#
+# NanoSim is installed into a SEPARATE `nanosim` env by
+# Apptainer/edna-pipeline.def (to avoid medaka's TensorFlow/Python pin
+# conflicts) and is intentionally NOT part of this env.
+#
+# Local (non-container) use:  mamba env create -f environment.yml
+name: edna-pipeline
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - cutadapt
+  - fastqc
+  - nanoplot
+  - multiqc
+  - blast
+  - ngspeciesid
+  - mafft
+  - cd-hit
+  - seqtk
+  - vsearch
+  - krona
+  - perl
+  - perl-bioperl
+  - r-base
+  - r-tidyverse
+  - r-dplyr
+  - r-ggplot2
+  - r-yaml

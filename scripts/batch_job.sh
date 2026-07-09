@@ -79,5 +79,8 @@ apptainer exec Apptainer/edna-pipeline.sif \
   eDNA/2024 \
   eDNA/otu_trimmed \
   eDNA/otu \
-  blastdb/mammalia_nt \
+  blastdb \
   8 true misc/primers.txt otu "$MODULES"
+# DB_DIR is the dir holding the BLAST DB; the DB name comes from config
+# (blast.db_name, default mammalia_midori) -> pipeline queries blastdb/mammalia_midori.
+# Build it with scripts/build_midori_db.sh (M2).

@@ -1,0 +1,127 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# config/pipeline.yaml — single source of truth for eDNA pipeline parameters.
+#
+# Consumed by:
+#   - scripts/pipeline.sh  (bash, via scripts/lib/parse_yaml.sh → CFG_* vars)
+#   - scripts/pipeline_dada2.R (R, via yaml::read_yaml — reads the `primers:` map)
+#   - future Snakemake port (native YAML `configfile:`)
+#
+# Conventions (so the lightweight bash loader stays reliable):
+#   - Put comments on their OWN lines, not trailing after a value.
+#   - Keep keys alphanumeric+underscore. (Primer names with hyphens, e.g.
+#     Riaz12S-V5, are only read by R, which parses YAML fully — that is fine.)
+#   - Scalars only for bash-consumed keys; the `primers:` mapping is R-only.
+#
+# CLI arguments to pipeline.sh still override these defaults where they overlap
+# (THREADS, RECLUSTER, MODE, PRIMER_FILE). Everything else is driven from here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Run-level defaults (mirror pipeline.sh positional-arg defaults) ──
+threads: 8
+recluster: true
+mode: otu
+
+# ── Phase 1: Cutadapt read-level trimming/quality filter ──
+# NOTE: this is a permissive READ-level window (not a per-marker amplicon
+# filter); clustering downstream handles off-target reads. Per-marker amplicon
+# bounds live under `primers:` below and are used only by the DADA2 branch.
+cutadapt:
+  min_qual: 12
+  min_len: 10
+  max_len: 1100
+  max_n: 0.05
+
+# ── Phase 3: NGSpeciesID clustering + consensus ──
+ngspeciesid:
+  q: 10.0
+  m: 550
+  s: 550
+  sample_size: 100
+  # ASV-mode sensitivity params:
+  consensus_n_rounds: 3
+  abundance_ratio: 0.01
+
+# ── Phase 3 (ASV): vsearch dereplication ──
+vsearch:
+  minuniquesize: 2
+
+# ── Phase 3: CD-HIT-EST deduplication ──
+cdhit:
+  identity: 1.0
+  asv_coverage: 0.95
+
+# ── Phase 3: primer trimming (Cutadapt on consensus/ASV FASTA) ──
+primer_trim:
+  error_rate: 0.15
+  min_overlap: 25
+
+# ── Phase 4: BLASTn taxonomy ──
+blast:
+  # DB name = the makeblastdb -out stem inside DB_DIR (pipeline queries $DB_DIR/<db_name>).
+  # Built by scripts/build_midori_db.sh (M2). Was hardcoded "nt" before.
+  db_name: mammalia_midori
+  perc_identity: 97
+  qcov_hsp_perc: 90
+  max_target_seqs: 100
+  evalue: 1e-6
+  taxid: 40674
+  negative_taxid: 9604
+  entrez_query: "Mammalia[Organism] NOT Hominidae[Organism]"
+  # bitscore_margin is currently hardcoded inside lca_assignment.R (0.98);
+  # recorded here for documentation until that script is wired to read config.
+  bitscore_margin: 0.98
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-primer amplicon bounds — consumed ONLY by scripts/pipeline_dada2.R.
+#
+# IMPORTANT (reviewer m6 fix): pipeline_dada2.R will REFUSE to run unless the
+# selected primer set exists here AND has `verified: true`. This prevents the
+# silent-read-discard trap where DADA2 length bounds tuned for one primer set
+# quietly discard valid reads from another.
+#
+# The min_len/max_len values below are PROVISIONAL starting points (~80% / ~130%
+# of the nominal amplicon size). They are NOT authoritative. Before any DADA2 run
+# that informs a result:
+#   1. Confirm the amplicon size for your primer set against the primer's
+#      publication AND this run's NanoPlot read-length distribution.
+#   2. Calibrate MAX_EE against quality_profiles.pdf.
+#   3. Only then set `verified: true` for that primer set.
+# Primer sequences themselves live in misc/primers.txt (name:fwd:rev).
+# ─────────────────────────────────────────────────────────────────────────────
+primers:
+  16Smam:
+    # 16S mammal mini-barcode (built-in default). Nominal amplicon ~140-170 bp.
+    min_len: 100
+    max_len: 200
+    max_ee: 5
+    verified: false
+  MiMammal:
+    # MiMammal-U (Ushio et al.) 12S. Nominal amplicon ~170 bp.
+    min_len: 130
+    max_len: 220
+    max_ee: 5
+    verified: false
+  Mammal16S:
+    # Generic mammal 16S. Nominal amplicon uncertain (~150-250 bp) — verify.
+    min_len: 120
+    max_len: 300
+    max_ee: 5
+    verified: false
+  Taberlat:
+    # Taberlet et al. 12S (name likely misspelled "Taberlet"). Nominal ~60-100 bp.
+    min_len: 45
+    max_len: 120
+    max_ee: 5
+    verified: false
+  Riaz12S-V5:
+    # Riaz et al. 2011 12S-V5. Nominal amplicon ~107 bp.
+    min_len: 85
+    max_len: 140
+    max_ee: 5
+    verified: false
+  Franklin360bp:
+    # Franklin et al. 2019 16S. Nominal amplicon ~330-360 bp (name says 360 bp).
+    min_len: 300
+    max_len: 420
+    max_ee: 5
+    verified: false

@@ -114,7 +114,7 @@ else
   printf "[WARN] No .nhr index files found matching '%s.*'\n" "$DB_DIR" >&2
   printf "       Available prefixes in %s:\n" "$DB_PARENT" >&2
   ls "$DB_PARENT"/*.nal 2>/dev/null | sed 's/\.nal$//' | xargs -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
-  printf "       Run: DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh\n" >&2
+  printf "       Build one with scripts/build_midori_db.sh (MIDORI2) -- see scripts/README.md\n" >&2
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,13 +135,95 @@ mkdir -p logs
 printf "[OK]   logs/ ready\n"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. batch_job.sh allocation check
+# 7. batch_job.sh allocation handling
+# batch_job.sh no longer hardcodes an allocation — it prompts for the TACC
+# account interactively at submit time (read -rp) and self-submits via sbatch.
+# Confirm that prompt is present rather than grepping for a static '#SBATCH -A'
+# line: that grep matches nothing now and, piped under `set -euo pipefail`, would
+# abort setup.sh before the manifest step below.
 # ─────────────────────────────────────────────────────────────────────────────
-if grep -q '<your-allocation>' scripts/batch_job.sh 2>/dev/null; then
-  printf "[WARN] batch_job.sh still has placeholder '<your-allocation>' — fill in before sbatch\n"
-else
-  ALLOC=$(grep '#SBATCH -A' scripts/batch_job.sh | awk '{print $3}')
+if grep -q 'Enter your TACC allocation account' scripts/batch_job.sh 2>/dev/null; then
+  printf "[OK]   batch_job.sh prompts for the TACC allocation at submit time\n"
+elif grep -q '#SBATCH -A' scripts/batch_job.sh 2>/dev/null; then
+  ALLOC="$(grep '#SBATCH -A' scripts/batch_job.sh | awk '{print $3}')"
   printf "[OK]   batch_job.sh allocation: %s\n" "$ALLOC"
+else
+  printf "[WARN] batch_job.sh has no interactive allocation prompt and no '#SBATCH -A' — verify before sbatch\n" >&2
 fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Provenance manifest (reproducibility)
+# Emits logs/run_manifest_<ts>.json + logs/env_snapshot_<ts>.txt capturing the
+# exact state of this run: git commit, config hash, container env, and input
+# FASTQ inventory. Best-effort — individual failures warn but do not abort.
+# Set MANIFEST_CHECKSUMS=false to skip per-file sha256 (faster on large inputs).
+# ─────────────────────────────────────────────────────────────────────────────
+printf "[INFO] Writing provenance manifest...\n"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+MANIFEST="logs/run_manifest_${TS}.json"
+ENV_SNAPSHOT="logs/env_snapshot_${TS}.txt"
+CONFIG_FILE="config/pipeline.yaml"
+
+# Container environment snapshot — the true pinned versions from the built .sif.
+if apptainer exec "$SIF" conda list -n edna-pipeline --export > "$ENV_SNAPSHOT" 2>/dev/null; then
+  printf "[OK]   Env snapshot: %s\n" "$ENV_SNAPSHOT"
+else
+  printf "[WARN] Could not capture conda env snapshot from container\n" >&2
+  ENV_SNAPSHOT=""
+fi
+
+GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+  GIT_DIRTY=false
+else
+  GIT_DIRTY=true
+fi
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  CONFIG_SHA="$(sha256sum "$CONFIG_FILE" 2>/dev/null | awk '{print $1}')"
+else
+  CONFIG_SHA=""
+fi
+
+HOSTN="$(hostname)"
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then EXEC_CTX="compute"
+elif [[ "$HOSTN" == login* ]]; then EXEC_CTX="login"
+else EXEC_CTX="local"; fi
+
+DO_SUM="${MANIFEST_CHECKSUMS:-true}"
+{
+  printf '{\n'
+  printf '  "generated_at": "%s",\n' "$TS"
+  printf '  "host": "%s",\n' "$HOSTN"
+  printf '  "execution_context": "%s",\n' "$EXEC_CTX"
+  printf '  "slurm_job_id": "%s",\n' "${SLURM_JOB_ID:-}"
+  printf '  "git_commit": "%s",\n' "$GIT_COMMIT"
+  printf '  "git_dirty": %s,\n' "$GIT_DIRTY"
+  printf '  "config_path": "%s",\n' "$CONFIG_FILE"
+  printf '  "config_sha256": "%s",\n' "$CONFIG_SHA"
+  printf '  "container_sif": "%s",\n' "$SIF"
+  printf '  "env_snapshot": "%s",\n' "$ENV_SNAPSHOT"
+  printf '  "mode": "%s",\n' "$MODE"
+  printf '  "threads": "%s",\n' "$THREADS"
+  printf '  "db_dir": "%s",\n' "$DB_DIR"
+  printf '  "raw_dir": "%s",\n' "$RAW_DIR"
+  printf '  "raw_fastq": [\n'
+  mapfile -t FQ < <(find "$RAW_DIR" -type f \( -name '*.fastq' -o -name '*.fastq.gz' \) | sort)
+  for i in "${!FQ[@]}"; do
+    f="${FQ[$i]}"
+    sz="$(stat -c %s "$f" 2>/dev/null || echo 0)"
+    if [[ "$DO_SUM" == "true" ]]; then
+      sh="$(sha256sum "$f" 2>/dev/null | awk '{print $1}')"
+    else
+      sh=""
+    fi
+    sep=","
+    [[ "$i" -eq $(( ${#FQ[@]} - 1 )) ]] && sep=""
+    printf '    {"file": "%s", "bytes": %s, "sha256": "%s"}%s\n' "$f" "$sz" "$sh" "$sep"
+  done
+  printf '  ]\n'
+  printf '}\n'
+} > "$MANIFEST"
+printf "[OK]   Manifest: %s (%d input FASTQ, checksums=%s)\n" "$MANIFEST" "${#FQ[@]}" "$DO_SUM"
 
 printf "[OK]   Setup complete.\n"
