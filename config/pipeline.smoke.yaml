@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# config/pipeline.smoke.yaml — SMOKE-TEST OVERLAY. NOT FOR PRODUCING RESULTS.
+#
+#   ####################################################################
+#   #  This config points the pipeline at `smoke_neotrop`, a ~100-      #
+#   #  sequence database built from ONE web-BLAST export by            #
+#   #  scripts/build_smoke_db.sh. It exists to prove Phase 4 runs end   #
+#   #  to end on a machine with no MIDORI2 build and no TACC access.    #
+#   #                                                                   #
+#   #  Any taxonomy produced with this config is a PLUMBING CHECK, not  #
+#   #  a finding. Species absent from those ~100 accessions will        #
+#   #  correctly return nothing. Never report results from this file.   #
+#   #  For real runs use config/pipeline.yaml (db_name: mammalia_midori)#
+#   ####################################################################
+#
+# Everything below is identical to config/pipeline.yaml except `blast.db_name`.
+# Keep the two in sync when tuning parameters; this is an overlay, not a fork.
+#
+# Usage:
+#   PIPELINE_CONFIG=config/pipeline.smoke.yaml bash scripts/pipeline.sh ...
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Run-level defaults ──
+threads: 4
+recluster: true
+mode: otu
+
+# ── Phase 1: Cutadapt read-level trimming/quality filter ──
+cutadapt:
+  min_qual: 12
+  min_len: 10
+  max_len: 1100
+  max_n: 0.05
+
+# ── Phase 3: NGSpeciesID clustering + consensus ──
+ngspeciesid:
+  q: 10.0
+  m: 550
+  s: 550
+  sample_size: 100
+  consensus_n_rounds: 3
+  abundance_ratio: 0.01
+
+# ── Phase 3 (ASV): vsearch dereplication ──
+vsearch:
+  minuniquesize: 2
+
+# ── Phase 3: CD-HIT-EST deduplication ──
+cdhit:
+  identity: 1.0
+  asv_coverage: 0.95
+
+# ── Phase 3: primer trimming ──
+primer_trim:
+  error_rate: 0.15
+  min_overlap: 25
+
+# ── Phase 4: BLASTn taxonomy ──
+blast:
+  # THE ONLY INTENTIONAL DIFFERENCE FROM config/pipeline.yaml.
+  # Built by scripts/build_smoke_db.sh into blastdb/smoke/.
+  db_name: smoke_neotrop
+  perc_identity: 97
+  qcov_hsp_perc: 90
+  max_target_seqs: 100
+  evalue: 1e-6
+  # Mammalia. Applied by blastn as a POSITIVE filter only — blastn rejects
+  # -taxids and -negative_taxids together (see pipeline.sh blast_taxonomy).
+  taxid: 40674
+  # Hominidae. NOT passed to blastn; consumed by lca_assignment.R, which drops
+  # the Hominidae genera after reporting a contamination count.
+  negative_taxid: 9604
+  entrez_query: "Mammalia[Organism] NOT Hominidae[Organism]"
+  bitscore_margin: 0.98
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-primer amplicon bounds — consumed ONLY by scripts/pipeline_dada2.R.
+# All sets remain `verified: false` by design: the DADA2 branch must not run on
+# unconfirmed length bounds. See config/pipeline.yaml for the full rationale.
+# ─────────────────────────────────────────────────────────────────────────────
+primers:
+  16Smam:
+    min_len: 100
+    max_len: 200
+    max_ee: 5
+    verified: false
