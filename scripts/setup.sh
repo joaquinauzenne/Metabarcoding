@@ -44,11 +44,24 @@ if [[ -z "$DB_DIR" ]]; then
   printf "[ERROR] DB_DIR must be specified\n" >&2; exit 1
 fi
 
+# ── Load pipeline configuration (same source of truth as pipeline.sh) ────────
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PIPELINE_CONFIG="${PIPELINE_CONFIG:-$SCRIPTS_DIR/../config/pipeline.yaml}"
+if [[ ! -f "$PIPELINE_CONFIG" ]]; then
+  printf "[ERROR] Pipeline config not found: %s\n" "$PIPELINE_CONFIG" >&2
+  printf "        Set PIPELINE_CONFIG or create config/pipeline.yaml\n" >&2
+  exit 1
+fi
+# shellcheck source=lib/parse_yaml.sh
+source "$SCRIPTS_DIR/lib/parse_yaml.sh"
+eval "$(parse_yaml "$PIPELINE_CONFIG" CFG_)"
+
 printf "[INFO] eDNA pipeline preflight\n"
 printf "  RAW_DIR:  %s\n" "$RAW_DIR"
 printf "  DB_DIR:   %s\n" "$DB_DIR"
 printf "  THREADS:  %s\n" "$THREADS"
 printf "  MODE:     %s\n" "$MODE"
+printf "  CONFIG:   %s\n" "$PIPELINE_CONFIG"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Apptainer — load module if available, then verify .sif exists
@@ -100,22 +113,41 @@ done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. BLAST database
-# DB_DIR is a BLAST path prefix (e.g. blastdb/nt_euk), not a directory.
-# blastn is called as: blastn -db "$DB_DIR"
+# DB_DIR is a DIRECTORY holding the database; the DB stem comes from the config
+# (blast.db_name). This mirrors pipeline.sh, which queries "$DB_DIR/$db_name".
+# Checking DB_DIR as if it were a path prefix (the old behaviour) reported a
+# spurious WARN even when a valid database was present.
 # ─────────────────────────────────────────────────────────────────────────────
-printf "[INFO] Checking BLAST database prefix: %s\n" "$DB_DIR"
-DB_PARENT=$(dirname "$DB_DIR")
-if [[ ! -d "$DB_PARENT" ]]; then
-  printf "[ERROR] DB parent directory '%s' does not exist\n" "$DB_PARENT" >&2; exit 1
+DB_NAME="${CFG_blast_db_name:-}"
+if [[ -z "$DB_NAME" ]]; then
+  printf "[ERROR] blast.db_name missing from %s\n" "$PIPELINE_CONFIG" >&2; exit 1
 fi
-if ls "${DB_DIR}".*.nhr &>/dev/null || ls "${DB_DIR}".nhr &>/dev/null; then
-  printf "[OK]   BLAST DB index files found for prefix: %s\n" "$DB_DIR"
+DB_PREFIX="$DB_DIR/$DB_NAME"
+printf "[INFO] Checking BLAST database: %s (dir=%s, db_name=%s)\n" "$DB_PREFIX" "$DB_DIR" "$DB_NAME"
+
+if [[ ! -d "$DB_DIR" ]]; then
+  printf "[ERROR] DB directory '%s' does not exist\n" "$DB_DIR" >&2; exit 1
+fi
+if compgen -G "${DB_PREFIX}.*n[hsi]r" >/dev/null || compgen -G "${DB_PREFIX}*.nal" >/dev/null; then
+  printf "[OK]   BLAST DB found: %s.*\n" "$DB_PREFIX"
 else
-  printf "[WARN] No .nhr index files found matching '%s.*'\n" "$DB_DIR" >&2
-  printf "       Available prefixes in %s:\n" "$DB_PARENT" >&2
-  ls "$DB_PARENT"/*.nal 2>/dev/null | sed 's/\.nal$//' | xargs -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
-  printf "       Build one with scripts/build_midori_db.sh (MIDORI2) -- see scripts/README.md\n" >&2
+  printf "[WARN] No BLAST DB index files found for '%s.*'\n" "$DB_PREFIX" >&2
+  printf "       Databases present in %s:\n" "$DB_DIR" >&2
+  { compgen -G "$DB_DIR/*.nal"; compgen -G "$DB_DIR/*.nin"; } 2>/dev/null \
+    | sed -e 's/\.nal$//' -e 's/\.nin$//' -e 's/\.[0-9][0-9]*$//' \
+    | xargs -r -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
+  printf "       Build one with scripts/build_midori_db.sh (MIDORI2).\n" >&2
 fi
+
+# Taxonomy lookup files: required for -taxids filtering and for populating the
+# staxids/sscinames columns Phase 4 and lca_assignment.R depend on.
+for tf in taxdb.btd taxdb.bti taxonomy4blast.sqlite3; do
+  if [[ -f "$DB_DIR/$tf" ]]; then
+    printf "[OK]   taxonomy file: %s\n" "$tf"
+  else
+    printf "[WARN] Missing %s in %s -- '-taxids' filtering and sscinames will fail\n" "$tf" "$DB_DIR" >&2
+  fi
+done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Raw reads
@@ -162,7 +194,7 @@ printf "[INFO] Writing provenance manifest...\n"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 MANIFEST="logs/run_manifest_${TS}.json"
 ENV_SNAPSHOT="logs/env_snapshot_${TS}.txt"
-CONFIG_FILE="config/pipeline.yaml"
+CONFIG_FILE="$PIPELINE_CONFIG"
 
 # Container environment snapshot — the true pinned versions from the built .sif.
 if apptainer exec "$SIF" conda list -n edna-pipeline --export > "$ENV_SNAPSHOT" 2>/dev/null; then

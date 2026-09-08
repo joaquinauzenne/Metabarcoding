@@ -5,17 +5,29 @@ From: condaforge/miniforge3:24.9.2-0
 
 %labels
     Author    JoaquinAuzenne
-    Version   1.3
+    Version   1.5
 
 %post
     # condaforge/miniforge3 base already provides mamba, conda, wget, curl.
     # No apt-get or Miniforge download needed — avoids HPC outbound HTTP restrictions.
 
     # Enforce strict channel priority for reproducible, conflict-free solves.
+    #
+    # CAUTION: strict priority means conda-forge outranks bioconda for any package
+    # present in both. conda-forge carries an ancient `blast` (2.5.0, 2018), so a
+    # bare `blast` spec silently resolved to it -- eleven versions behind bioconda's
+    # -- and 2.5.0 predates the `-taxids` option entirely, breaking Phase 4 with
+    # "Unknown argument: taxids". Hence the explicit `bioconda::blast>=2.15` below,
+    # and the post-solve version assertion after the env is created.
     conda config --set channel_priority strict
 
     # Create the edna-pipeline environment with all pipeline tools.
-    #   r-yaml — lets pipeline_dada2.R read config/pipeline.yaml (reviewer m6 fix).
+    #   r-yaml  — pipeline_dada2.R + lca_assignment.R read config/pipeline.yaml.
+    #   r-tidyr — REQUIRED by lca_assignment.R (library(tidyr) for separate_rows).
+    #             r-tidyverse should pull it, but it is named explicitly because a
+    #             missing tidyr fails Phase 4 SILENTLY: pipeline.sh guards the
+    #             Rscript call with `|| [WARN]`, so taxonomy.tsv is simply never
+    #             written and the run still reports success.
     mamba create -y -n edna-pipeline \
         -c conda-forge -c bioconda \
         python=3.10 \
@@ -23,7 +35,7 @@ From: condaforge/miniforge3:24.9.2-0
         fastqc \
         nanoplot \
         multiqc \
-        blast \
+        'bioconda::blast>=2.15' \
         ngspeciesid \
         mafft \
         cd-hit \
@@ -35,6 +47,7 @@ From: condaforge/miniforge3:24.9.2-0
         r-base \
         r-tidyverse \
         r-dplyr \
+        r-tidyr \
         r-ggplot2 \
         r-yaml
 
@@ -43,9 +56,35 @@ From: condaforge/miniforge3:24.9.2-0
     # scientific-stack deps in a shared solve. Invoke it by explicit path, e.g.
     #   /opt/conda/envs/nanosim/bin/read_analysis.py
     #   /opt/conda/envs/nanosim/bin/simulator.py
+    #
+    # NON-FATAL BY DESIGN: %post runs under `set -e`, so an unsolvable nanosim
+    # env would abort the whole build and yield no image at all -- even though
+    # NanoSim is needed only by the M1 simulation harness, not by Phases 1-4.
+    # Failure is downgraded to a warning; characterize.sh already errors clearly
+    # if the env is absent when it is actually needed.
     mamba create -y -n nanosim \
         -c conda-forge -c bioconda \
-        nanosim
+        nanosim \
+      || printf '[WARN] nanosim env failed to solve; image built WITHOUT NanoSim.\n         Phases 1-4 are unaffected; scripts/simulate/* will not run.\n'
+
+    # Post-solve assertion: fail the BUILD rather than ship an image whose blastn
+    # cannot run Phase 4. `-taxids` arrived in BLAST+ 2.8; anything older aborts
+    # every taxonomy call with "Unknown argument: taxids". A silent 2.5.0 downgrade
+    # is exactly what this catches.
+    BLASTN_BIN=/opt/conda/envs/edna-pipeline/bin/blastn
+    BLASTN_VER="$("$BLASTN_BIN" -version | head -1 | sed 's/^blastn: *//; s/+.*//')"
+    BLASTN_MAJ="${BLASTN_VER%%.*}"
+    BLASTN_MIN="$(printf '%s' "$BLASTN_VER" | cut -d. -f2)"
+    printf '[INFO] blastn version in image: %s\n' "$BLASTN_VER"
+    if [ "$BLASTN_MAJ" -lt 2 ] || { [ "$BLASTN_MAJ" -eq 2 ] && [ "$BLASTN_MIN" -lt 8 ]; }; then
+        printf '[ERROR] blastn %s is too old for -taxids (need >= 2.8). Refusing to build.\n' "$BLASTN_VER"
+        exit 1
+    fi
+    "$BLASTN_BIN" -help 2>&1 | grep -q -- '-taxids' || {
+        printf '[ERROR] blastn in this image does not advertise -taxids. Refusing to build.\n'
+        exit 1
+    }
+    printf '[OK] blastn supports -taxids\n'
 
     # Initialise Krona taxonomy database.
     /opt/conda/envs/edna-pipeline/opt/krona/updateTaxonomy.sh 2>/dev/null || true

@@ -31,6 +31,14 @@ set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# nullglob must be set SCRIPT-WIDE, not inside run_consensus. Phase 4a iterates
+#   "$CONS_BASE"/per_barcode/*/per-barcode-consensus/*_trimmed.fasta
+# and that path only exists when RECLUSTER=false. Resuming with MODULES=Phase4
+# skips run_consensus entirely, so without nullglob here the loop would run once
+# over the literal unexpanded pattern -- creating a directory named '*' and then
+# failing the blastn call under set -e.
+shopt -s nullglob
+
 # ── Load pipeline configuration (single source of truth) ─────────────────────
 # All tunable parameters live in config/pipeline.yaml. Override the path with
 # PIPELINE_CONFIG=/path/to/config.yaml if needed. Parsed into CFG_* shell vars.
@@ -494,17 +502,29 @@ blast_taxonomy() {
   printf "       Mode:           %s\n" "$MODE"
   printf "\n"
 
+  # BLAST options are built as ARRAYS, not strings. Two reasons:
+  #   1. blastn REJECTS -taxids together with -negative_taxids (they are declared
+  #      mutually incompatible; passing both aborts at argument-parse time, before
+  #      the DB is even opened). Mammalia scoping therefore stays here as a positive
+  #      -taxids filter, and the Hominidae (9604) exclusion moves downstream into
+  #      lca_assignment.R, which drops the Hominidae genera after reporting a count.
+  #      CFG_blast_negative_taxid is still consumed -- by the LCA step, not by blastn.
+  #   2. -entrez_query is multi-word. As an unquoted string it word-split across argv
+  #      and leaked literal quote characters; an array preserves it as one argument.
   if [[ -d "$DB_DIR" ]]; then
-    DB_OPT="-db $DB_DIR/$CFG_blast_db_name"
-    THREAD_OPT="-num_threads $THREADS"
-    FILTER_OPT="-taxids $CFG_blast_taxid -negative_taxids $CFG_blast_negative_taxid"
+    DB_OPT=( -db "$DB_DIR/$CFG_blast_db_name" )
+    THREAD_OPT=( -num_threads "$THREADS" )
+    FILTER_OPT=( -taxids "$CFG_blast_taxid" )
   else
-    DB_OPT="-remote -db $DB_DIR"
-    THREAD_OPT=""
-    FILTER_OPT="-entrez_query '$CFG_blast_entrez_query'"
+    DB_OPT=( -remote -db "$DB_DIR" )
+    THREAD_OPT=()
+    FILTER_OPT=( -entrez_query "$CFG_blast_entrez_query" )
   fi
 
-  printf "[INFO] Using BLAST options: %s %s\n\n" "$DB_OPT" "$THREAD_OPT"
+  printf "[INFO] Using BLAST options: %s %s %s\n" \
+    "${DB_OPT[*]}" "${FILTER_OPT[*]}" "${THREAD_OPT[*]}"
+  printf "[INFO] Hominidae (taxid %s) excluded downstream in lca_assignment.R\n\n" \
+    "$CFG_blast_negative_taxid"
 
   # 4a: per-barcode
   printf "[INFO] Phase 4a: Assigning taxonomy per barcode\n"
@@ -516,15 +536,15 @@ blast_taxonomy() {
 
     printf "[INFO]   [%s] BLASTn megablast (17-col) -> %s/blast_all.tsv\n" "$sample" "$outdir"
     blastn -task megablast \
-           $DB_OPT \
-           $FILTER_OPT \
+           "${DB_OPT[@]}" \
+           "${FILTER_OPT[@]}" \
            -query "$fasta" \
            -perc_identity "$CFG_blast_perc_identity" \
            -qcov_hsp_perc "$CFG_blast_qcov_hsp_perc" \
            -max_target_seqs "$CFG_blast_max_target_seqs" \
            -evalue "$CFG_blast_evalue" \
            -outfmt '6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle qcovs' \
-           $THREAD_OPT \
+           "${THREAD_OPT[@]}" \
            -out "$outdir/blast_all.tsv"
 
     # Derive Krona format (15-col: cols 1-14 + 16, skipping scomnames at col 15)
@@ -544,15 +564,15 @@ blast_taxonomy() {
   mkdir -p "$CONS_BASE/combined/taxonomy"
   printf "[INFO]   BLASTn megablast (17-col) -> combined/taxonomy/blast_all.tsv\n"
   blastn -task megablast \
-         $DB_OPT \
-         $FILTER_OPT \
+         "${DB_OPT[@]}" \
+         "${FILTER_OPT[@]}" \
          -query "$CONS_BASE/combined/final_consensus.fasta" \
          -perc_identity "$CFG_blast_perc_identity" \
          -qcov_hsp_perc "$CFG_blast_qcov_hsp_perc" \
          -max_target_seqs "$CFG_blast_max_target_seqs" \
          -evalue "$CFG_blast_evalue" \
          -outfmt '6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids sscinames scomnames stitle qcovs' \
-         $THREAD_OPT \
+         "${THREAD_OPT[@]}" \
          -out "$CONS_BASE/combined/taxonomy/blast_all.tsv"
 
   # Derive Krona format (15-col: cols 1-14 + 16, skipping scomnames at col 15)
@@ -591,10 +611,12 @@ RAW_DIR="${1%/}"
 TRIMMED_DIR="${2%/}"
 CONS_BASE="${3%/}"
 DB_DIR="${4%/}"
-THREADS="${5:-8}"
-RECLUSTER="${6:-true}"
+# Defaults come from config/pipeline.yaml so it is genuinely the single source of
+# truth; CLI positional args still override, as documented in the config header.
+THREADS="${5:-$CFG_threads}"
+RECLUSTER="${6:-$CFG_recluster}"
 PRIMER_FILE="${7:-}"
-MODE="${8:-otu}"
+MODE="${8:-$CFG_mode}"
 MODULES="${9:-all}"
 
 # Write run settings for reproducibility (mirrors PIMENTA's $MID.settings.txt).

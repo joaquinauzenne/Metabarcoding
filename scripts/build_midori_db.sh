@@ -125,12 +125,16 @@ NTOT=$(grep -c '^>' "$COMBINED" || echo 0)
 printf "[INFO] Combined sequences: %s\n" "$NTOT"
 
 # ─── Step 3: makeblastdb -parse_seqids (proven path) ─────────────────────────
+# -blastdb_version 5 is REQUIRED, not cosmetic: `-taxids` fails outright on a v4
+# database with "Taxonomy filtering is not supported in v4 BLAST dbs", and older
+# makeblastdb builds default to v4. Phase 4 always passes -taxids.
 printf "\n[INFO] === Step 3: makeblastdb -> %s ===\n" "$DB_PREFIX"
 apptainer exec --bind "$BIND_PATH":"$BIND_PATH" "$SIF" \
   makeblastdb \
     -in "$COMBINED" \
     -dbtype nucl \
     -parse_seqids \
+    -blastdb_version 5 \
     -out "$DB_PREFIX" \
     -title "MIDORI2 12S+16S ${RELEASE} (mammal ID via query-time -taxids 40674)"
 printf "[OK]   makeblastdb complete: %s.*\n" "$DB_PREFIX"
