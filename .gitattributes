@@ -1,0 +1,43 @@
+# Line-ending policy.
+#
+# This repo is edited on Windows (core.autocrlf=true) but every script executes
+# on Linux — inside the Apptainer container, on TACC Lonestar6, or under WSL.
+# A CRLF working-tree copy of a shell script is FATAL there, not cosmetic:
+#   * `set -euo pipefail\r`      -> "set: pipefail\r: invalid option name", exit 2
+#   * a CRLF line in primers.txt -> the reverse primer carries a trailing \r and
+#                                   cutadapt rejects it as a non-IUPAC adapter
+#
+# Forcing eol=lf here is the durable fix. Running dos2unix instead only helps
+# until the next checkout, which re-applies autocrlf and silently regresses.
+#
+# After editing this file run:  git add --renormalize .
+# Then verify it took:          git ls-files --eol | grep w/crlf   (expect no output)
+
+* text=auto
+
+# Executed on Linux — must be LF in the working tree, always.
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.pl    text eol=lf
+*.R     text eol=lf
+*.r     text eol=lf
+*.py    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.def   text eol=lf
+Dockerfile text eol=lf
+
+# Parsed by the pipeline as `name:fwd:rev`; a trailing \r corrupts the reverse
+# primer. This file was committed with CRLF in the index — hence the explicit rule.
+misc/primers.txt text eol=lf
+
+# Biological data and binaries: never touch these.
+*.fastq  -text
+*.fastq.gz binary
+*.fasta  -text
+*.fa     -text
+*.sif    binary
+*.tar.gz binary
+*.zip    binary
+*.rds    binary
+*.pdf    binary
