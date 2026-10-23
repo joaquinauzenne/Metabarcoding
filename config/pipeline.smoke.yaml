@@ -10,7 +10,7 @@
 #   #  Any taxonomy produced with this config is a PLUMBING CHECK, not  #
 #   #  a finding. Species absent from those ~100 accessions will        #
 #   #  correctly return nothing. Never report results from this file.   #
-#   #  For real runs use config/pipeline.yaml (db_name: mammalia_midori)#
+#   #  For real runs use config/pipeline.yaml (db_name: mammalia_nt)#
 #   ####################################################################
 #
 # Everything below is identical to config/pipeline.yaml except `blast.db_name`.

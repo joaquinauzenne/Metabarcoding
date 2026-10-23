@@ -23,7 +23,7 @@ IFS=$'\n\t'
 #        [threads] [mode] [primer_file]
 #     <sim_raw_dir>       output of simulate.sh (contains sim_mock/*.fastq.gz)
 #     <work_base>         scratch base for trimmed/consensus outputs
-#     <db_dir>            BLAST DB dir (mammalia_midori once M2 is built, or a small ad-hoc DB)
+#     <db_dir>            BLAST DB dir (mammalia_nt, or a small ad-hoc DB)
 #     <ground_truth.tsv>  from mock_community.R
 # Env: SIF [Apptainer/edna-pipeline.sif]
 # ─────────────────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ This pipeline converts raw Nanopore basecalled reads into taxonomic identificati
 1. Quality-trimming reads with Cutadapt (16S/12S mammalian primers)
 2. Generating consensus sequences via NGSpeciesID clustering + MAFFT alignment (OTU mode) or dereplicate + chimera removal (ASV mode)
 3. Optionally running DADA2 as an experimental parallel ASV inference branch
-4. Assigning taxonomy with BLASTn against a curated Mammalia-only NCBI nucleotide database
+4. Assigning taxonomy with BLASTn against a Mammalia-only subset of the NCBI `nt_euk` nucleotide database
 5. Applying Lowest Common Ancestor (LCA) post-processing for robust taxonomic resolution
 6. Visualizing species detections and IUCN range maps interactively via the `edna-viz` Shiny app
 
@@ -29,8 +29,8 @@ Metabarcoding/
 │   ├── asv_otu_comparison.R     # Concordance comparison across pipeline branches
 │   ├── setup.sh                 # Environment validation and directory init
 │   ├── mammalia_nt_db.sh        # SLURM: download nt_euk + build Mammalia-only BLAST DB
+│   ├── build_midori_db.sh       # Candidate MIDORI2 12S+16S reference DB (not validated)
 │   ├── consensus.pl             # BioPerl MSA-to-consensus
-│   ├── blast_taxonomy.sh        # Standalone taxonomy phase
 │   ├── ...                      # Additional standalone phase scripts
 │   └── legacy/                  # Deprecated scripts kept for reference (e.g., blastdb_init.sh)
 ├── edna-viz/                    # Golem Shiny app (replaces VisualizationApp.qmd)
@@ -123,16 +123,18 @@ bash scripts/setup.sh <RAW_DIR> <DB_DIR> [THREADS] [SETTINGS_FILE]
 
 ## BLAST Database Setup
 
-Build the Mammalia BLAST DB on the HPC (SLURM). On first use pass `DOWNLOAD_DB=true` to fetch `nt_euk` (~50 GB Eukaryota subset) plus the required taxonomy files via rsync; subsequent runs reuse the existing download:
+The reference is a Mammalia-only subset of NCBI `nt_euk`, selected by `blast.db_name: mammalia_nt` in `config/pipeline.yaml`. Build it on the HPC (SLURM). On first use pass `DOWNLOAD_DB=true` to fetch `nt_euk` plus the required taxonomy files via rsync; subsequent runs reuse the existing download:
 
 ```bash
 DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh   # first run
 sbatch scripts/mammalia_nt_db.sh                    # subsequent rebuilds
 ```
 
-The script extracts Mammalia (taxid 40674) and rebuilds a compact BLAST DB. Hominidae (taxid 9604) is excluded at search time by `pipeline.sh`'s `blastn -negative_taxids 9604`, not at extraction.
+The script extracts Mammalia (taxid 40674) with `blastdbcmd` and rebuilds a compact BLAST DB next to the NCBI `taxdb` files, so `staxids`/`sscinames` resolve at query time. `pipeline.sh` applies Mammalia as a positive `-taxids` filter; Hominidae (taxid 9604) is removed downstream in `lca_assignment.R`, which reports a contamination count first.
 
-> Full-NCBI-`nt` builds via `update_blastdb.pl` were retired on 2026-04-25 (see `scripts/legacy/blastdb_init.sh`). FTP is firewalled on TACC and `nt_euk` covers all eukaryotic targets.
+> A full `nt_euk` download is large; the May 2026 build exceeded the 1 TB `/work` quota, so check free space before `DOWNLOAD_DB=true`. Full-`nt` builds via `update_blastdb.pl` were retired (see `scripts/legacy/blastdb_init.sh`) because FTP is blocked on TACC.
+
+**Candidate replacement (not yet validated):** `scripts/build_midori_db.sh` builds a much smaller [MIDORI2](https://www.reference-midori.info/) 12S + 16S mitochondrial database (`mammalia_midori`). It is not the default. `scripts/diag_midori_blast.sh` and `scripts/diag_edirect_tacc.sh` are the Phase B0 probes for the MIDORI2 and EDirect/CRABS options; the pipeline switches only after a probe passes and `scripts/smoke_test.sh` runs clean against the new DB.
 
 ---
 
@@ -150,7 +152,7 @@ bash scripts/pipeline.sh <RAW_DIR> <TRIMMED_DIR> <CONS_BASE> <DB_DIR> \
 | `RAW_DIR` | Raw `.fastq` / `.fastq.gz` files | — |
 | `TRIMMED_DIR` | Output for trimmed reads | — |
 | `CONS_BASE` | Base dir for consensus sequences | — |
-| `DB_DIR` | BLAST DB path or remote name (`nt`) | — |
+| `DB_DIR` | Directory holding the BLAST DB (`blast.db_name` in config) or a remote name (`nt`) | — |
 | `THREADS` | CPU threads | 8 |
 | `RECLUSTER` | CD-HIT-EST reclustering at 100% (OTU mode) | `true` |
 | `PRIMER_FILE` | Primer definitions file | built-in 16Smam |
@@ -160,7 +162,7 @@ bash scripts/pipeline.sh <RAW_DIR> <TRIMMED_DIR> <CONS_BASE> <DB_DIR> \
 
 ```bash
 bash scripts/pipeline.sh \
-  eDNA/2024 eDNA/trimmed eDNA/consensus scripts/mammalia_nt_db \
+  eDNA/2024 eDNA/trimmed eDNA/consensus $WORK/Metabarcoding/blastdb \
   16 true misc/primers.txt otu
 ```
 
@@ -168,7 +170,7 @@ bash scripts/pipeline.sh \
 
 ```bash
 bash scripts/pipeline.sh \
-  eDNA/2024 eDNA/trimmed eDNA/consensus_asv scripts/mammalia_nt_db \
+  eDNA/2024 eDNA/trimmed eDNA/consensus_asv $WORK/Metabarcoding/blastdb \
   16 true misc/primers.txt asv
 ```
 
@@ -309,4 +311,4 @@ Defined in `misc/primers.txt` (format: `name:forward:reverse`):
 - Example data provided in `examples/` for testing the visualization app
 
 
-_Note: Repository restructuring assisted by Claude Code using Opus 4.5, 5.5 and Sonnet 5.5; design and science by the author. This repository remains in progress under my personal direction. OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development. -JA_
+_Note: Built with AI coding assistance (Claude Code); design and science by the author. OTU mode has been verified end to end in a WSL/Apptainer smoke test; the ASV (NGSpeciesID) and DADA2 branches are in active development. -JA_

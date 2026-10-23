@@ -26,7 +26,6 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=02:00:00
-#SBATCH --account=OTH21013
 
 ####— Fail-fast and error trap —####
 set -o errexit    # Exit on non-zero :contentReference[oaicite:7]{index=7}

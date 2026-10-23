@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# DEPRECATED — moved to scripts/legacy/ on 2026-07-02 (reference only).
-#   Phase A (nt_euk -> Mammalia BLAST DB) was abandoned; see
-#   contextLiterature/eln-phase-a-dead-blast4-nt-euk-2026-05-13.md.
-#   Superseded by scripts/build_midori_db.sh (MIDORI2). See scripts/README.md.
+# STATUS (2026-10-23): this is the current reference-DB method (nt_euk ->
+#   Mammalia subset). A full nt_euk download exceeded the 1 TB /work quota on
+#   2026-05-02 (SLURM job 3138888); see the May 2026 ELN entries. MIDORI2
+#   (scripts/build_midori_db.sh) is a candidate replacement that has NOT been
+#   validated against this pipeline and is not the default.
 # ─────────────────────────────────────────────────────────────────────────────
 #SBATCH --job-name=mammalia_nt_db
 #SBATCH --output=logs/mammalia_nt_%j.out

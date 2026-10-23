@@ -5,6 +5,12 @@ IFS=$'\n\t'
 # ─────────────────────────────────────────────────────────────────────────────
 # scripts/build_midori_db.sh  — M2 (Phase B1): build the MIDORI2 reference DB
 #
+# STATUS (2026-10-23): CANDIDATE, NOT THE DEFAULT. The pipeline default is
+#   mammalia_nt (scripts/mammalia_nt_db.sh). Before switching config
+#   blast.db_name to mammalia_midori: (1) diag_midori_blast.sh must PASS,
+#   (2) smoke_test.sh must pass against the built DB, (3) assignments on the
+#   validated sample set must be compared with the nt-based / web-BLAST calls.
+#
 # Purpose: download MIDORI2 UNIQ (BLAST-flavour) reference FASTAs for 12S (srRNA)
 #          and 16S (lrRNA), build a single BLAST database with makeblastdb
 #          -parse_seqids, and record exact provenance. Reuses the download +

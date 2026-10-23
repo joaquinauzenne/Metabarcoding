@@ -136,7 +136,7 @@ else
   { compgen -G "$DB_DIR/*.nal"; compgen -G "$DB_DIR/*.nin"; } 2>/dev/null \
     | sed -e 's/\.nal$//' -e 's/\.nin$//' -e 's/\.[0-9][0-9]*$//' \
     | xargs -r -I{} basename {} | sort -u | sed 's/^/         /' >&2 || true
-  printf "       Build one with scripts/build_midori_db.sh (MIDORI2).\n" >&2
+  printf "       Build one with scripts/mammalia_nt_db.sh (nt_euk -> Mammalia).\n" >&2
 fi
 
 # Taxonomy lookup files: required for -taxids filtering and for populating the

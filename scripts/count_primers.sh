@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Root dir containing exactly these four subfolders
-RAW_ROOT="/mnt/c/Users/joaau/Metagenomics/eDNA"
+# Root dir containing exactly these four subfolders (2024, Qia25, TA12, TA25).
+# Usage: bash count_primers.sh [RAW_ROOT]   (or set RAW_ROOT in the environment)
+RAW_ROOT="${1:-${RAW_ROOT:-}}"
+if [[ -z "$RAW_ROOT" || ! -d "$RAW_ROOT" ]]; then
+  echo "Usage: $0 <RAW_ROOT>  (or export RAW_ROOT); directory not found: ${RAW_ROOT:-<unset>}" >&2
+  exit 1
+fi
 
 # Primer metadata: NAME:FWD:REV
 declare -a PRIMER_PAIRS=(

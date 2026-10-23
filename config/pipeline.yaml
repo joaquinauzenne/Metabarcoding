@@ -58,8 +58,11 @@ primer_trim:
 # ── Phase 4: BLASTn taxonomy ──
 blast:
   # DB name = the makeblastdb -out stem inside DB_DIR (pipeline queries $DB_DIR/<db_name>).
-  # Built by scripts/build_midori_db.sh (M2). Was hardcoded "nt" before.
-  db_name: mammalia_midori
+  # Built by scripts/mammalia_nt_db.sh (nt_euk -> Mammalia subset). Was hardcoded
+  # "nt" before. MIDORI2 (scripts/build_midori_db.sh -> mammalia_midori) is a
+  # candidate that has not been validated against this pipeline; switch db_name
+  # only after diag_midori_blast.sh and a smoke_test.sh run against it both pass.
+  db_name: mammalia_nt
   perc_identity: 97
   qcov_hsp_perc: 90
   max_target_seqs: 100

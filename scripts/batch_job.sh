@@ -82,5 +82,5 @@ apptainer exec Apptainer/edna-pipeline.sif \
   blastdb \
   8 true misc/primers.txt otu "$MODULES"
 # DB_DIR is the dir holding the BLAST DB; the DB name comes from config
-# (blast.db_name, default mammalia_midori) -> pipeline queries blastdb/mammalia_midori.
-# Build it with scripts/build_midori_db.sh (M2).
+# (blast.db_name, default mammalia_nt) -> pipeline queries blastdb/mammalia_nt.
+# Build it with scripts/mammalia_nt_db.sh.

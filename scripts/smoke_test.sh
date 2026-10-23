@@ -175,7 +175,7 @@ if compgen -G "${DB_PREFIX}*.n[hsi]r" >/dev/null || compgen -G "${DB_PREFIX}*.na
    || compgen -G "${DB_PREFIX}*.nin" >/dev/null; then
   ok "BLAST DB present: $DB_PREFIX"
 else
-  die "no BLAST DB found at $DB_PREFIX.* — build one (scripts/build_smoke_db.sh or build_midori_db.sh)"
+  die "no BLAST DB found at $DB_PREFIX.* — build one (scripts/build_smoke_db.sh or mammalia_nt_db.sh)"
 fi
 for tf in taxdb.btd taxdb.bti taxonomy4blast.sqlite3; do
   [[ -f "$DB_DIR/$tf" ]] || die "missing $DB_DIR/$tf — -taxids filtering and sscinames will not work"
