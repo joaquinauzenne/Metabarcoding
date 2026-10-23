@@ -2,7 +2,7 @@ Package: ednaviz
 Title: eDNA Metabarcoding Visualization App
 Version: 0.0.0.9000
 Authors@R:
-    person("Joaquin", "Auzenne", , "joaquinauzenne@example.com", role = c("aut", "cre"))
+    person("Joaquin", "Auzenne", role = c("aut", "cre"))
 Description: Interactive Shiny application for visualizing mammalian eDNA
     metabarcoding results. Accepts BLAST output in web CSV or CLI TSV format,
     applies LCA taxonomy assignment, and renders IUCN range polygons plus
