@@ -25,7 +25,7 @@ gmpy2 @ file:///home/conda/feedstock_root/build_artifacts/gmpy2_1715527302982/wo
 grpcio @ file:///home/conda/feedstock_root/build_artifacts/grpc-split_1713388282847/work
 h2 @ file:///home/conda/feedstock_root/build_artifacts/h2_1634280454336/work
 h5py @ file:///home/conda/feedstock_root/build_artifacts/h5py_1717664826778/work
-hpack==4.0.0
+hpack==4.2.0
 humanfriendly @ file:///home/conda/feedstock_root/build_artifacts/humanfriendly_1696765224545/work
 humanize @ file:///home/conda/feedstock_root/build_artifacts/humanize_1720456301165/work
 hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1619110129307/work
