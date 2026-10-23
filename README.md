@@ -309,4 +309,4 @@ Defined in `misc/primers.txt` (format: `name:forward:reverse`):
 - Example data provided in `examples/` for testing the visualization app
 
 
-_Note: This repository has been modified recently with the usage of agentic AI, specifically Claude Code, to ameliorate its structure. This repository remains in progress under my personal direction. OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development. -JA_
+_Note: Repository restructuring assisted by Claude Code using Opus 4.5, 5.5 and Sonnet 5.5; design and science by the author. This repository remains in progress under my personal direction. OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development. -JA_
