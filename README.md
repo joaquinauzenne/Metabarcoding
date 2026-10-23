@@ -2,9 +2,7 @@
 
 A modular, HPC-ready pipeline for identifying mammal species from environmental DNA (eDNA) in soil samples using Oxford Nanopore long-read sequencing and MEGABLAST taxonomic assignment.
 
-# OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development.
-
-
+*Note: This repository has been modified recently with the usage of agentic AI, specifically Claude Code, to ameliorate its structure. This repository remains in progress under my personal direction. OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development. -JA*
 ---
 
 ## Project Overview
@@ -312,4 +310,3 @@ Defined in `misc/primers.txt` (format: `name:forward:reverse`):
 - Container definitions (`Docker/`, `Apptainer/`) ensure computational reproducibility
 - Example data provided in `examples/` for testing the visualization app
 
-*Note: This repository has been modified recently with the usage of agentic AI, specifically Claude Code, to ameliorate its structure. This repository remains in progress under my personal direction. -JA*
