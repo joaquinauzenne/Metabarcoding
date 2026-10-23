@@ -22,9 +22,9 @@ IFS=$'\n\t'
 #   Does NOT constitute a reference database for producing results. It is one
 #   query's top hits — a few dozen species, heavily biased to Neotropical primates.
 #   Sequences absent from it will correctly return nothing. Never publish findings
-#   from this DB; use scripts/build_midori_db.sh (M2) for that.
+#   from this DB; use scripts/mammalia_nt_db.sh for that.
 #
-# NOT a substitute for mammalia_midori. The DB is deliberately named
+# NOT a substitute for mammalia_nt. The DB is deliberately named
 # `smoke_neotrop` so it can never be mistaken for the real M2 reference build.
 #
 # Usage:

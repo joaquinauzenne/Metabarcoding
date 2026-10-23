@@ -10,7 +10,7 @@ This pipeline converts raw Nanopore basecalled reads into taxonomic identificati
 1. Quality-trimming reads with Cutadapt (16S/12S mammalian primers)
 2. Generating consensus sequences via NGSpeciesID clustering + MAFFT alignment (OTU mode) or dereplicate + chimera removal (ASV mode)
 3. Optionally running DADA2 as an experimental parallel ASV inference branch
-4. Assigning taxonomy with BLASTn against a MIDORI2 mitochondrial (12S/16S) reference BLAST database, restricted to Mammalia at query time
+4. Assigning taxonomy with BLASTn against a Mammalia-only subset of the NCBI `nt_euk` nucleotide database
 5. Applying Lowest Common Ancestor (LCA) post-processing for robust taxonomic resolution
 6. Visualizing species detections and IUCN range maps interactively via the `edna-viz` Shiny app
 
@@ -28,10 +28,11 @@ Metabarcoding/
 │   ├── pipeline_dada2.R         # DADA2 experimental ASV branch (Nanopore)
 │   ├── asv_otu_comparison.R     # Concordance comparison across pipeline branches
 │   ├── setup.sh                 # Environment validation and directory init
-│   ├── build_midori_db.sh       # Build the MIDORI2 12S+16S BLAST reference DB
+│   ├── mammalia_nt_db.sh        # SLURM: download nt_euk + build Mammalia-only BLAST DB
+│   ├── build_midori_db.sh       # Candidate MIDORI2 12S+16S reference DB (not validated)
 │   ├── consensus.pl             # BioPerl MSA-to-consensus
 │   ├── ...                      # Additional standalone phase scripts
-│   └── legacy/                  # Deprecated scripts kept for reference (e.g., mammalia_nt_db.sh, blastdb_init.sh)
+│   └── legacy/                  # Deprecated scripts kept for reference (e.g., blastdb_init.sh)
 ├── edna-viz/                    # Golem Shiny app (replaces VisualizationApp.qmd)
 │   ├── DESCRIPTION
 │   ├── R/
@@ -122,20 +123,18 @@ bash scripts/setup.sh <RAW_DIR> <DB_DIR> [THREADS] [SETTINGS_FILE]
 
 ## BLAST Database Setup
 
-The default reference is a [MIDORI2](https://www.reference-midori.info/) (UNIQ, BLAST flavour) 12S + 16S database, selected by `blast.db_name: mammalia_midori` in `config/pipeline.yaml`. Build it in an `idev` session (network required):
+The reference is a Mammalia-only subset of NCBI `nt_euk`, selected by `blast.db_name: mammalia_nt` in `config/pipeline.yaml`. Build it on the HPC (SLURM). On first use pass `DOWNLOAD_DB=true` to fetch `nt_euk` plus the required taxonomy files via rsync; subsequent runs reuse the existing download:
 
 ```bash
-idev -t 00:30:00 -p development
-module load tacc-apptainer
-MIDORI_12S_URL="<srRNA UNIQ BLAST fasta url>" \
-MIDORI_16S_URL="<lrRNA UNIQ BLAST fasta url>" \
-RELEASE="GB270" \
-bash scripts/build_midori_db.sh
+DOWNLOAD_DB=true sbatch scripts/mammalia_nt_db.sh   # first run
+sbatch scripts/mammalia_nt_db.sh                    # subsequent rebuilds
 ```
 
-Current release URLs are listed at <https://www.reference-midori.info/download.php>. The DB is built with `makeblastdb -parse_seqids` next to the NCBI `taxdb` files, so `staxids`/`sscinames` resolve at query time. Mammalia (taxid 40674) is applied as a positive `-taxids` filter in `pipeline.sh`; Hominidae is removed downstream in `lca_assignment.R`, which reports a contamination count first. `scripts/db_coverage_audit.R` quantifies how much of a species checklist the release covers.
+The script extracts Mammalia (taxid 40674) with `blastdbcmd` and rebuilds a compact BLAST DB next to the NCBI `taxdb` files, so `staxids`/`sscinames` resolve at query time. `pipeline.sh` applies Mammalia as a positive `-taxids` filter; Hominidae (taxid 9604) is removed downstream in `lca_assignment.R`, which reports a contamination count first.
 
-> The earlier Mammalia-filtered `nt_euk` build (`scripts/legacy/mammalia_nt_db.sh`) was abandoned after it exceeded the `/work` quota, and full-`nt` builds via `update_blastdb.pl` were retired because FTP is blocked on TACC. Both are kept under `scripts/legacy/` for reference only.
+> A full `nt_euk` download is large; the May 2026 build exceeded the 1 TB `/work` quota, so check free space before `DOWNLOAD_DB=true`. Full-`nt` builds via `update_blastdb.pl` were retired (see `scripts/legacy/blastdb_init.sh`) because FTP is blocked on TACC.
+
+**Candidate replacement (not yet validated):** `scripts/build_midori_db.sh` builds a much smaller [MIDORI2](https://www.reference-midori.info/) 12S + 16S mitochondrial database (`mammalia_midori`). It is not the default. `scripts/diag_midori_blast.sh` and `scripts/diag_edirect_tacc.sh` are the Phase B0 probes for the MIDORI2 and EDirect/CRABS options; the pipeline switches only after a probe passes and `scripts/smoke_test.sh` runs clean against the new DB.
 
 ---
 
