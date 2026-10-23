@@ -2,7 +2,7 @@
 
 A modular, HPC-ready pipeline for identifying mammal species from environmental DNA (eDNA) in soil samples using Oxford Nanopore long-read sequencing and MEGABLAST taxonomic assignment.
 
-### THIS PIPELINE IS CURRENTLY UNDER MAJOR RECONSTRUCTION! PLEASE CONTACT ME PRIOR TO USAGE!
+# OTU mode is stable and validated on Lonestar6; ASV (NGSpeciesID) and DADA2 branches are in active development.
 
 
 ---
