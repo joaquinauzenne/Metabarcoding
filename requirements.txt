@@ -19,7 +19,7 @@ dnaio @ file:///opt/conda/conda-bld/dnaio_1728030024501/work
 dnspython @ file:///home/conda/feedstock_root/build_artifacts/dnspython_1709190728464/work
 edlib @ file:///opt/conda/conda-bld/python-edlib_1725491902959/work
 filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1726613473834/work
-fonttools==4.57.0
+fonttools==4.60.2
 fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1729608855534/work
 gmpy2 @ file:///home/conda/feedstock_root/build_artifacts/gmpy2_1715527302982/work
 grpcio @ file:///home/conda/feedstock_root/build_artifacts/grpc-split_1713388282847/work
@@ -67,7 +67,7 @@ pooch @ file:///home/conda/feedstock_root/build_artifacts/pooch_1717777836653/wo
 progressbar33==2.4
 pyabpoa @ file:///opt/conda/conda-bld/pyabpoa_1726691026183/work
 pyaml_env @ file:///home/conda/feedstock_root/build_artifacts/pyaml-env_1720954795653/work
-pyarrow==16.1.0
+pyarrow==23.0.1
 pycparser @ file:///home/conda/feedstock_root/build_artifacts/pycparser_1711811537435/work
 pydantic @ file:///home/conda/feedstock_root/build_artifacts/pydantic_1720293063581/work
 pydantic_core @ file:///home/conda/feedstock_root/build_artifacts/pydantic-core_1720041213962/work
