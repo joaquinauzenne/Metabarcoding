@@ -1,3 +1,10 @@
+# LEGACY — not used by the pipeline. Kept for reference only.
+# This is a 'pip freeze' snapshot of an old Python 3.8 conda env; most lines point at
+# conda build folders (file:///...) that only existed on the original machine, so it
+# cannot be installed as-is. Use environment.yml (repo root) for a local conda env, or
+# the containers (Apptainer/edna-pipeline.def, Docker/Dockerfile). Pins below are
+# kept patched so this archived copy carries no known vulnerabilities
+# (fonttools, hpack, pyarrow).
 annotated-types @ file:///home/conda/feedstock_root/build_artifacts/annotated-types_1716290248287/work
 attrs @ file:///home/conda/feedstock_root/build_artifacts/attrs_1722977137225/work
 biopython @ file:///home/conda/feedstock_root/build_artifacts/biopython_1704895409820/work
@@ -19,7 +26,7 @@ dnaio @ file:///opt/conda/conda-bld/dnaio_1728030024501/work
 dnspython @ file:///home/conda/feedstock_root/build_artifacts/dnspython_1709190728464/work
 edlib @ file:///opt/conda/conda-bld/python-edlib_1725491902959/work
 filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1726613473834/work
-fonttools==4.60.2
+fonttools==4.64.0
 fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1729608855534/work
 gmpy2 @ file:///home/conda/feedstock_root/build_artifacts/gmpy2_1715527302982/work
 grpcio @ file:///home/conda/feedstock_root/build_artifacts/grpc-split_1713388282847/work

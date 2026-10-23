@@ -57,13 +57,14 @@ Metabarcoding/
 │   ├── tests/testthat/          # Unit tests
 │   └── Dockerfile               # Production container
 ├── misc/
-│   └── primers.txt              # 6 mammalian primer sets
+│   ├── primers.txt              # 6 mammalian primer sets
+│   └── legacy/requirements.txt  # Old pip-freeze snapshot (reference only, not installable)
 ├── examples/
 │   └── 2ER9WHC1013-Alignment-Descriptions.csv   # Sample BLAST output (demo input)
 ├── Docker/Dockerfile            # Pipeline container
 ├── Apptainer/edna-pipeline.def  # HPC container definition
 ├── VisualizationApp.qmd         # Legacy Quarto/Shiny app (superseded by edna-viz/)
-├── requirements.txt             # Conda environment dependencies
+├── environment.yml              # Conda environment spec (local / WSL)
 └── eDNA/                        # Generated pipeline outputs (excluded from git)
 ```
 
@@ -71,7 +72,7 @@ Metabarcoding/
 
 ## Dependencies
 
-All bioinformatics tools are packaged in the Apptainer container (`Apptainer/edna-pipeline.def`) or the conda environment (`requirements.txt`).
+All bioinformatics tools are packaged in the Apptainer container (`Apptainer/edna-pipeline.def`) or the conda environment (`environment.yml`).
 
 ### Core Bioinformatics Tools
 
@@ -112,7 +113,7 @@ apptainer build Apptainer/edna-pipeline.sif Apptainer/edna-pipeline.def
 ### 2. Conda (local / WSL)
 
 ```bash
-conda create -n edna-pipeline --file requirements.txt
+mamba env create -f environment.yml   # or: conda env create -f environment.yml
 conda activate edna-pipeline
 ```
 
